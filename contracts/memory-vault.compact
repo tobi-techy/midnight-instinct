@@ -1,0 +1,73 @@
+// Memory vault: shielded commitments for agent memories.
+//
+// Privacy model. The memory text and the owner's vault secret never leave the
+// owner's device. The circuit takes the text's digest as a private input and
+// stores only a hiding commitment produced by `persistentCommit` (which mixes
+// in a high-entropy salt, so even a guessable memory cannot be brute-forced
+// from the ledger). The owner binding is itself a commitment to the owner's
+// secret, so the ledger does not reveal who owns which memory.
+//
+// Selective disclosure happens in `attest`: the verifier learns a single small
+// category code, never the text. Each attestation id is nullified on use, so a
+// proof cannot be replayed. `revoke` retires a memory so no further proofs can
+// be made about it.
+//
+// Why `persistentCommit` and not a plain hash: the ledger only ever sees the
+// commitment; `persistentCommit` is the platform primitive the compiler treats
+// as hiding its input, so it may be written to public state without
+// `disclose()`. A plain hash of a guessable value would not be safe.
+//
+// Toolchain: `compact compile` (see contracts/README.md for the pinned version).
+//   compact compile contracts/memory-vault.compact contracts/build/memory-vault
+
+pragma language_version 0.23;
+
+import CompactStandardLibrary;
+
+// Public, on-chain state. Every field here is readable by anyone.
+export ledger commitments: Map<Bytes<32>, Bytes<32>>; // commitment -> owner binding
+export ledger nullifiers: Map<Bytes<32>, Boolean>;    // attestationId -> spent
+export ledger attestations: Map<Bytes<32>, Uint<8>>;  // attestationId -> disclosed category
+export ledger active: Map<Bytes<32>, Boolean>;         // commitment -> live (false after revoke)
+
+// Private input: the owner's vault secret. Implemented on the owner's device
+// (the local proof server), never on-chain.
+witness ownerSecret(): Bytes<32>;
+
+// Anchor a memory. Stores only a hiding commitment plus a binding to the owner,
+// and returns the commitment so the caller can reference it later.
+export circuit commit(preimage: Bytes<32>, salt: Bytes<32>): Bytes<32> {
+  const c = persistentCommit<Bytes<32>>(preimage, salt);
+  assert(!commitments.member(c), "memory already committed");
+  commitments.insert(c, persistentCommit<Bytes<32>>(ownerSecret(), c));
+  active.insert(c, true);
+  return disclose(c);
+}
+
+// Selective disclosure: prove a property of a memory without revealing it.
+// The verifier learns only `category` (a small code); the nullifier makes the
+// proof single-use.
+export circuit attest(c: Bytes<32>, attestationId: Bytes<32>, category: Uint<8>): [] {
+  const key = disclose(c);
+  const aid = disclose(attestationId);
+  assert(commitments.member(key), "unknown commitment");
+  assert(active.lookup(key), "commitment revoked");
+  assert(
+    commitments.lookup(key) == persistentCommit<Bytes<32>>(ownerSecret(), c),
+    "not the owner of this commitment"
+  );
+  assert(!nullifiers.member(aid), "attestation already used");
+  nullifiers.insert(aid, true);
+  attestations.insert(aid, disclose(category));
+}
+
+// Retire a memory so no further proofs can be made about it.
+export circuit revoke(c: Bytes<32>): [] {
+  const key = disclose(c);
+  assert(commitments.member(key), "unknown commitment");
+  assert(
+    commitments.lookup(key) == persistentCommit<Bytes<32>>(ownerSecret(), c),
+    "not the owner of this commitment"
+  );
+  active.insert(key, false);
+}

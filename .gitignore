@@ -10,3 +10,10 @@ dist/
 .DS_Store
 coverage/
 .pnpm-store/
+contracts/build/
+deploy/midnight-devnet/node_modules/
+deploy/midnight-devnet/contracts/managed/
+deploy/midnight-devnet/.midnight-state.json
+deploy/midnight-devnet/.midnight-seed.json
+deploy/midnight-devnet/.midnight-wallet-state/
+deploy/midnight-devnet/midnight-level-db/

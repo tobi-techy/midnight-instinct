@@ -1,7 +1,7 @@
 {
-  "name": "@open-instinct/cli",
+  "name": "@open-instinct/midnight",
   "version": "0.1.0",
-  "description": "instinct CLI: init, dev, deploy to Maritime, connect, invite, trust, status",
+  "description": "Midnight privacy layer for Open Instinct: shielded memory vault, selective-disclosure proofs, ZK-gated allowances",
   "license": "MIT",
   "type": "module",
   "main": "./dist/index.js",
@@ -12,10 +12,7 @@
       "import": "./dist/index.js"
     }
   },
-  "files": [
-    "dist",
-    "README.md"
-  ],
+  "files": ["dist", "README.md"],
   "engines": {
     "node": ">=22.19.0"
   },
@@ -23,24 +20,15 @@
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run --passWithNoTests",
-    "lint": "tsc -p tsconfig.json --noEmit",
-    "dev": "node --import tsx src/bin.ts dev"
+    "lint": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
     "@open-instinct/core": "workspace:*",
-    "@open-instinct/inkbox": "workspace:*",
-    "@open-instinct/midnight": "workspace:*",
-    "@open-instinct/server": "workspace:*",
-    "@inkbox/sdk": "^0.7.13",
-    "maritime-sdk": "^0.9.0"
+    "typebox": "1.3.27"
   },
   "devDependencies": {
     "@types/node": "^22.15.0",
     "typescript": "^5.8.3",
-    "vitest": "^3.2.4",
-    "tsx": "^4.19.0"
-  },
-  "bin": {
-    "instinct": "./dist/bin.js"
+    "vitest": "^3.2.4"
   }
 }

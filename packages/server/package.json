@@ -36,6 +36,7 @@
     "@open-instinct/computer": "workspace:*",
     "@open-instinct/core": "workspace:*",
     "@open-instinct/inkbox": "workspace:*",
+    "@open-instinct/midnight": "workspace:*",
     "@open-instinct/network": "workspace:*",
     "@open-instinct/payments": "workspace:*"
   },
