@@ -19,6 +19,7 @@ import * as Rx from 'rxjs';
 
 import { resolveNetwork, getOrCreateWallet, formatWalletBackupNotice } from './network';
 import { createWallet, persistWalletState, unshieldedToken, type WalletContext } from './wallet';
+import { ownerSecretFromSeed } from './secret';
 
 import { deployContract, findDeployedContract } from '@midnight-ntwrk/midnight-js-contracts';
 import { httpClientProofProvider } from '@midnight-ntwrk/midnight-js-http-client-proof-provider';
@@ -164,7 +165,7 @@ async function main(): Promise<void> {
   const allowanceMod = await loadContract(ALLOWANCE_DIR);
 
   // ── Memory vault: deploy, then a real commit -> attest round-trip ──────────
-  const ownerSecret = randomBytes(32);
+  const ownerSecret = ownerSecretFromSeed(WALLET.seed);
   const vaultWitnesses = {
     ownerSecret: ({ privateState }: { privateState: { ownerSecret: Uint8Array } }) =>
       [privateState, privateState.ownerSecret] as [unknown, Uint8Array],

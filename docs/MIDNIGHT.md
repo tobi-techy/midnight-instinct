@@ -110,9 +110,10 @@ flowchart TD
 
 ## The proof-server adapter
 
-The agent expects a small REST service that owns the wallet and runs Compact
-artifacts. It is intentionally tiny so it can be swapped for the official
-Midnight stack as the toolchain stabilizes.
+The agent talks to a small REST service that owns the wallet and runs the
+Compact artifacts; the agent process never holds a seed phrase. It is
+implemented in `deploy/midnight-devnet/src/adapter.ts` on top of the official
+Midnight.js SDK, and it backs the runtime client against a real chain.
 
 | Endpoint | Body | Returns |
 |---|---|---|
@@ -186,6 +187,24 @@ A verified run produced (see `deployment.json`):
 To move to Preprod, set `BLOCKFROST_PROJECT_ID` and `MIDNIGHT_WALLET_MNEMONIC`
 and run `npm run setup -- --network preprod`; see
 `deploy/midnight-devnet/README.md`.
+
+### The agent drives the live chain
+
+`npm run adapter` in `deploy/midnight-devnet/` starts the REST service above,
+backed by the deployed contracts and the real wallet. Point the agent at it and
+its own `MidnightClient` issues real transactions:
+
+```sh
+cd deploy/midnight-devnet && npm run adapter &   # listens on :6400
+cd ../..
+MIDNIGHT_PROOF_URL=http://127.0.0.1:6400 \
+MIDNIGHT_CONTRACT_ADDRESS=$(node -e "console.log(require('./deploy/midnight-devnet/deployment.json').memoryVault.address)") \
+node packages/midnight/scripts/adapter-roundtrip.mjs
+```
+
+A verified run drove the agent's client through the adapter and produced real
+commit and attest transactions on-chain (`00092056…` and `00188329…`), with the
+indexer confirming the commitment and nullifier.
 
 ## Verifying a proof
 

@@ -53,6 +53,23 @@ npm run test:e2e      # reconnects and reads the on-chain ledger
 npm run check-balance # wallet + DUST balance
 ```
 
+## Drive the chain from the agent
+
+`npm run adapter` starts the REST service the agent's `local`/`testnet`
+`MidnightClient` talks to (the contract in `docs/MIDNIGHT.md`). It owns the
+wallet and the deployed handles, and turns each request into a real circuit
+call:
+
+```bash
+npm run adapter &     # listens on http://127.0.0.1:6400
+cd ../..
+MIDNIGHT_PROOF_URL=http://127.0.0.1:6400 \
+MIDNIGHT_CONTRACT_ADDRESS=$(node -e "console.log(require('./deploy/midnight-devnet/deployment.json').memoryVault.address)") \
+node packages/midnight/scripts/adapter-roundtrip.mjs
+```
+
+That drives the agent's own client through a real commit → attest round-trip.
+
 `npm run setup` starts only what the target network needs, compiles both
 contracts, and deploys. The local chain is ephemeral: `docker compose down -v`
 wipes it and you get fresh ids.
@@ -90,6 +107,8 @@ register for DUST, then look the contract up on
 - `src/wallet.ts`, `src/wallet-state.ts` — wallet construction and sync-state cache.
 - `src/network.ts` — per-network endpoints, wallet seeds, Blockfrost token wiring.
 - `src/deploy.ts` — deploys both contracts and runs commit → attest.
+- `src/adapter.ts` — the REST service the agent's runtime client calls.
+- `src/secret.ts` — the deterministic owner secret shared by deploy and adapter.
 - `scripts/e2e-check.ts` — reconnects and asserts on-chain state.
 - `docker-compose.yml` — the local node, indexer and proof server.
 

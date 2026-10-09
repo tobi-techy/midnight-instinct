@@ -10,6 +10,7 @@
     "build": "tsc --noEmit || true",
     "setup": "tsx src/setup.ts",
     "deploy": "tsx src/deploy.ts",
+    "adapter": "tsx src/adapter.ts",
     "check-balance": "tsx src/check-balance.ts",
     "network": "tsx src/network.ts",
     "proof-server:start": "docker compose up -d",

@@ -9,6 +9,7 @@
  * (sha256 commitments, single-use nullifiers, spend totals) so demos, CI and
  * the smoke test run with no faucet and no network.
  */
+import { randomBytes } from "node:crypto";
 import { allowanceKey, centsToUsd, mockCommitmentOf, newAttestationId, parseCategory, preimageOf, usdToCents, type CategoryLabel } from "./commit.js";
 import type { MidnightEnv } from "./config.js";
 
@@ -177,7 +178,7 @@ export class MidnightClient {
     const category = parseCategory(input.category);
     const { CATEGORY_CODES } = await import("./commit.js");
     const code = CATEGORY_CODES[category];
-    const salt = input.salt ?? Math.random().toString(36).slice(2) + Date.now().toString(36);
+    const salt = input.salt ?? randomBytes(32).toString("hex");
     // The circuit takes only the digest and a random salt; persistentCommit
     // mixes in the salt so a guessable memory still cannot be brute-forced.
     const preimage = preimageOf(text);
