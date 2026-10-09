@@ -5,6 +5,11 @@
  * wallet, no faucet and no network. Use it as the first demo of the privacy
  * model, and as a CI check that the commitment scheme is intact.
  *
+ * The on-chain commitment is `persistentCommit(preimage, salt)`, computed by
+ * the Compact circuit. The mock below stands in for that with sha256 so the
+ * round-trip is deterministic offline; the real value is opaque and only the
+ * proof server can produce it.
+ *
  *   node packages/midnight/scripts/prove-local.mjs
  */
 import { createHash } from "node:crypto";
@@ -15,8 +20,12 @@ function sha256hex(input) {
   return createHash("sha256").update(input, "utf8").digest("hex");
 }
 
-function commitmentOf(text, salt, code) {
-  return sha256hex(`${code}|${salt}|${text}`);
+function preimageOf(text) {
+  return sha256hex(text);
+}
+
+function mockCommitmentOf(preimage, salt) {
+  return sha256hex(`pc|${preimage}|${salt}`);
 }
 
 function ok(cond, what) {
@@ -28,11 +37,12 @@ console.log("Midnight local proving round-trip (mock anchoring)\n");
 
 const secret = "I take medication X daily";
 const salt = "s_demo_salt_123";
-const code = CATEGORY_CODES.health;
+const preimage = preimageOf(secret);
 
 console.log("1. commit");
-const commitment = commitmentOf(secret, salt, code);
+const commitment = mockCommitmentOf(preimage, salt);
 console.log(`   plaintext (stays local): ${JSON.stringify(secret)}`);
+console.log(`   preimage (private input): ${preimage}`);
 console.log(`   commitment (goes on-chain): ${commitment}`);
 ok(/^[0-9a-f]{64}$/.test(commitment), "commitment is 32 bytes");
 ok(!commitment.includes("medication"), "commitment reveals nothing about the text");
@@ -45,10 +55,10 @@ console.log(`   attestation id (single-use): ${attestationId}`);
 ok(disclosed === 1, "proof discloses the category code, not the text");
 
 console.log("\n3. verify off-chain (what a verifier can recompute)");
-const recomputed = commitmentOf(secret, salt, code);
+const recomputed = mockCommitmentOf(preimageOf(secret), salt);
 ok(recomputed === commitment, "recomputing the hash from the secret matches the commitment");
-ok(recomputed !== commitmentOf("something else", salt, code), "a different secret yields a different commitment");
-ok(recomputed !== commitmentOf(secret, salt, CATEGORY_CODES.finance), "a different category yields a different commitment");
+ok(recomputed !== mockCommitmentOf(preimageOf("something else"), salt), "a different secret yields a different commitment");
+ok(recomputed !== mockCommitmentOf(preimageOf(secret), "other_salt"), "a different salt yields a different commitment");
 
 console.log("\n4. replay resistance");
 const seen = new Set();

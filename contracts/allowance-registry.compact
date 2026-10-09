@@ -1,41 +1,53 @@
 // Allowance registry: ZK-gated spending and permission grants (stretch goal).
 //
 // The agent's policy engine treats a missing or unproven allowance as
-// ask/deny. This contract anchors (owner, spender, capability) allowances so a
-// spend is provably within limit without revealing the exact amount on-ledger:
-// `amount` is a witness, and the circuit only permits the transition when the
-// new total stays within the authorized max.
+// ask/deny. This contract anchors (owner, spender, capability) allowances, and
+// the circuit enforces the limit: a spend transition is only valid while the
+// running total stays inside the authorized maximum. The agent cannot exceed
+// the limit even if it is prompt-injected, because the proof would not verify.
 //
-// Amounts are USD cents as Uint<64>; the TS client converts dollars to cents.
-// Expiry is enforced off-ledger by the agent in v0 (recorded beside the grant)
-// and moves into a ledger timestamp check once the toolchain pin supports it.
+// Amounts are USD cents as Uint<64>. The authorized maximum and the running
+// total are public (an allowance is a statement, like a card limit); what the
+// circuit guarantees is that no spend can push the total past the limit. The
+// off-ledger exact-amount hiding that v0 planned is not achievable while the
+// running total is public, so we disclose it here and say so in the docs.
 //
-// Toolchain: compactc, pinned version in contracts/README.md. Validate with:
-//   compactc contracts/allowance-registry.compact --output contracts/build/allowances
+// Expiry is enforced off-ledger by the agent in v0 and moves into a ledger
+// timestamp check once the toolchain pin supports it.
+//
+// Toolchain: `compact compile` (see contracts/README.md for the pinned version).
+//   compact compile contracts/allowance-registry.compact contracts/build/allowance-registry
 
-pragma language_version >= 0.17 < 0.19;
+pragma language_version 0.23;
 
-export ledger limits: Map<Bytes<32>, Uint<64>>;
-export ledger spent: Map<Bytes<32>, Uint<64>>;
-export ledger active: Map<Bytes<32>, Boolean>;
+import CompactStandardLibrary;
+
+// Public, on-chain state.
+export ledger limits: Map<Bytes<32>, Uint<64>>; // key -> authorized max (cents)
+export ledger spent: Map<Bytes<32>, Uint<64>>;  // key -> running total (cents)
+export ledger active: Map<Bytes<32>, Boolean>;   // key -> live (false after revoke)
 
 export circuit authorize(key: Bytes<32>, maxAmount: Uint<64>): [] {
-  assert active[key] == false;
-  assert maxAmount > 0;
-  active[key] = true;
-  limits[key] = maxAmount;
-  spent[key] = 0;
+  const k = disclose(key);
+  assert(!active.member(k) || !active.lookup(k), "allowance already active");
+  assert(maxAmount > 0, "max must be positive");
+  active.insert(k, true);
+  limits.insert(k, disclose(maxAmount));
+  spent.insert(k, 0);
 }
 
-export circuit spend(key: Bytes<32>, witness amount: Uint<64>): [] {
-  assert active[key] == true;
-  assert amount > 0;
-  assert amount <= limits[key];
-  assert spent[key] <= limits[key] - amount;
-  spent[key] = spent[key] + amount;
+export circuit spend(key: Bytes<32>, amount: Uint<64>): [] {
+  const k = disclose(key);
+  assert(active.member(k) && active.lookup(k), "no active allowance");
+  assert(amount > 0, "amount must be positive");
+  const remaining = limits.lookup(k) - spent.lookup(k);
+  assert(amount <= remaining, "over allowance");
+  const next = (spent.lookup(k) + disclose(amount)) as Uint<64>;
+  spent.insert(k, next);
 }
 
 export circuit revoke(key: Bytes<32>): [] {
-  assert active[key] == true;
-  active[key] = false;
+  const k = disclose(key);
+  assert(active.member(k) && active.lookup(k), "no active allowance");
+  active.insert(k, false);
 }

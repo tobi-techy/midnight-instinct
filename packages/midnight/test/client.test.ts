@@ -32,8 +32,11 @@ describe("commitment scheme", () => {
     expect(a.commitment).toBe(b.commitment);
     const c = await client.commit({ text: "I take medication Y", category: "health", salt: "fixed" });
     expect(c.commitment).not.toBe(a.commitment);
-    const d = await client.commit({ text: "I take medication X", category: "finance", salt: "fixed" });
+    const d = await client.commit({ text: "I take medication X", category: "health", salt: "other-salt" });
     expect(d.commitment).not.toBe(a.commitment);
+    // The category is disclosed at proof time, not baked into the commitment.
+    const e = await client.commit({ text: "I take medication X", category: "finance", salt: "fixed" });
+    expect(e.commitment).toBe(a.commitment);
   });
 
   it("keeps the plaintext out of the commitment and reports a mock tx", async () => {

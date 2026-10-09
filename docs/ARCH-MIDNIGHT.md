@@ -79,8 +79,8 @@ sequenceDiagram
   T->>S: remember(text, category)
   S->>M: appendDurable(text)
   S->>C: commit({ text, category })
-  C->>C: commitment = sha256(code|salt|text)
-  C->>L: storeCommitment(commitment, blinder)
+  C->>C: preimage = sha256(text); circuit computes persistentCommit(preimage, salt)
+  C->>L: commit(preimage, salt) -> stores commitment + owner binding
   L-->>C: txHash
   C-->>S: { commitment, txHash }
   S-->>T: anchored

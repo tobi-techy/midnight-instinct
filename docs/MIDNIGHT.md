@@ -21,13 +21,15 @@ owner already texts.
 | Data | Where it lives | On-ledger? |
 |---|---|---|
 | Memory text | `memory/MEMORY.md` on the agent host | No |
-| Commitment (`sha256(code\|salt\|text)`) | Midnight ledger | Yes |
-| Ownership blinder | Midnight ledger + host | Yes (as a hash of a host secret) |
+| Preimage (`sha256(text)`) | Circuit input only | No |
+| Commitment (`persistentCommit(preimage, salt)`, computed in-circuit) | Midnight ledger | Yes |
+| Owner binding (`persistentCommit(ownerSecret, commitment)`) | Midnight ledger | Yes |
 | Disclosed category code | Midnight ledger | Yes (1–5, or 0 for existence) |
-| Spend amount | Witness only | No |
+| Spend amount | Public running total | Yes (the limit is what the circuit enforces) |
 
-- **Nothing reversible** is on-chain. A commitment is a one-way hash; without
-  the salt and text it cannot be opened.
+- **Nothing reversible** is on-chain. `persistentCommit` mixes the preimage
+  with a fresh random salt, so even a guessable memory cannot be brute-forced
+  from the ledger. Without the salt and text the commitment cannot be opened.
 - **Proofs are single-use.** Each attestation id is nullified on use, so one
   proof cannot be replayed as two.
 - **Plaintext never enters the prompt for anyone but the owner.** A non-owner
@@ -81,14 +83,15 @@ sequenceDiagram
   O->>A: remember privately I take medication X
   A->>A: memory_write-equivalent saves plaintext locally
   A->>M: vault_commit(text, health)
-  M->>P: POST /commit { commitment, ownerBlind }
-  P->>L: storeCommitment(commitment, blinder)
+  Note over M,L: the circuit computes persistentCommit; only it can open it
+  M->>P: POST /commit { preimage, salt }
+  P->>L: commit(preimage, salt) -> persistentCommit; store + owner binding
   L-->>P: txHash
-  P-->>M: { txHash }
+  P-->>M: { commitment, txHash }
   A-->>O: Saved privately as a health memory. Commitment 0x… tx 0x…
   O->>A: prove to my partner I have a health note, hide the name
   A->>M: vault_prove_reveal(commitment, health)
-  M->>P: POST /attest { commitment, attestationId, disclosed=1 }
+  M->>P: POST /attest { commitment, attestationId, category=1 }
   P->>L: attest(...); nullifier[attestationId]=true
   L-->>P: txHash
   A-->>O: Proof recorded. Verifier learns: health. Text stays local.
@@ -114,8 +117,8 @@ Midnight stack as the toolchain stabilizes.
 | Endpoint | Body | Returns |
 |---|---|---|
 | `POST /deploy` | `{ contract: "memory-vault" \| "allowance-registry" }` | `{ address, txHash }` |
-| `POST /commit` | `{ contract, commitment, ownerBlind }` | `{ txHash }` |
-| `POST /attest` | `{ contract, commitment, attestationId, disclosed, blind }` | `{ txHash }` |
+| `POST /commit` | `{ contract, preimage, salt }` | `{ commitment, txHash }` |
+| `POST /attest` | `{ contract, commitment, attestationId, category }` | `{ txHash }` |
 | `POST /allowance/authorize` | `{ contract, key, maxAmount }` | `{ txHash }` |
 | `POST /allowance/spend` | `{ contract, key, amount }` | `{ txHash }` |
 | `POST /allowance/revoke` | `{ contract, key }` | `{ txHash }` |

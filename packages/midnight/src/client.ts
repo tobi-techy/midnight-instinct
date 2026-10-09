@@ -9,7 +9,7 @@
  * (sha256 commitments, single-use nullifiers, spend totals) so demos, CI and
  * the smoke test run with no faucet and no network.
  */
-import { allowanceKey, blinderOf, centsToUsd, commitmentOf, newAttestationId, parseCategory, usdToCents, type CategoryLabel } from "./commit.js";
+import { allowanceKey, centsToUsd, mockCommitmentOf, newAttestationId, parseCategory, preimageOf, usdToCents, type CategoryLabel } from "./commit.js";
 import type { MidnightEnv } from "./config.js";
 
 export interface CommitInput {
@@ -127,6 +127,14 @@ function txOf(parsed: unknown, fallback: string): string {
   return fallback;
 }
 
+/** The real commitment is computed in-circuit; the proof server returns it. */
+function commitmentOfParsed(parsed: unknown, fallback: string): string {
+  if (parsed && typeof parsed === "object" && "commitment" in parsed && typeof (parsed as { commitment: unknown }).commitment === "string") {
+    return (parsed as { commitment: string }).commitment;
+  }
+  return fallback;
+}
+
 export class MidnightClient {
   readonly mode: string;
   private readonly env: MidnightEnv;
@@ -170,22 +178,27 @@ export class MidnightClient {
     const { CATEGORY_CODES } = await import("./commit.js");
     const code = CATEGORY_CODES[category];
     const salt = input.salt ?? Math.random().toString(36).slice(2) + Date.now().toString(36);
-    const commitment = commitmentOf(text, salt, code);
-    if (this.state.commitments[commitment]) {
-      const existing = this.state.commitments[commitment]!;
-      return { commitment, category, code, salt: existing.salt, txHash: existing.txHash, mode: this.mode, ...(this.env.contractAddress ? { contractAddress: this.env.contractAddress } : {}) };
+    // The circuit takes only the digest and a random salt; persistentCommit
+    // mixes in the salt so a guessable memory still cannot be brute-forced.
+    const preimage = preimageOf(text);
+    const mockCommitment = mockCommitmentOf(preimage, salt);
+    if (this.mode === "mock" && this.state.commitments[mockCommitment]) {
+      const existing = this.state.commitments[mockCommitment]!;
+      return { commitment: mockCommitment, category: existing.category as CategoryLabel, code: existing.code, salt: existing.salt, txHash: existing.txHash, mode: this.mode, ...(this.env.contractAddress ? { contractAddress: this.env.contractAddress } : {}) };
     }
-    const blind = blinderOf(this.state.vaultKey, commitment);
+    let commitment: string;
     let txHash: string;
     if (this.mode === "mock") {
+      commitment = mockCommitment;
       txHash = `mock_commit_${commitment.slice(0, 16)}`;
     } else {
       if (!this.env.proofUrl) throw new Error(`${this.mode} mode needs MIDNIGHT_PROOF_URL`);
       const parsed = await postJson(this.fetchImpl, `${this.env.proofUrl}/commit`, {
         contract: this.env.contractAddress,
-        commitment,
-        ownerBlind: blind,
+        preimage,
+        salt,
       });
+      commitment = commitmentOfParsed(parsed, mockCommitment);
       txHash = txOf(parsed, `pending_${commitment.slice(0, 12)}`);
     }
     this.state.commitments[commitment] = { category, code, salt, txHash, at: this.now().toISOString() };
@@ -218,7 +231,6 @@ export class MidnightClient {
     }
     const attestationId = newAttestationId();
     if (this.state.nullifiers[attestationId]) throw new Error("attestation collision: retry");
-    const blind = blinderOf(this.state.vaultKey, commitment);
     let txHash: string;
     if (this.mode === "mock") {
       txHash = `mock_attest_${attestationId.slice(0, 16)}`;
@@ -228,8 +240,7 @@ export class MidnightClient {
         contract: this.env.contractAddress,
         commitment,
         attestationId,
-        disclosed,
-        blind,
+        category: disclosed,
       });
       txHash = txOf(parsed, `pending_${attestationId.slice(0, 12)}`);
     }

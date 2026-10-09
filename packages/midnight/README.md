@@ -30,7 +30,7 @@ for local/testnet. See `docs/MIDNIGHT.md` in the repo root.
 ## Layout
 
 - `src/client.ts` — `MidnightClient`: commit, prove, authorize, checkSpend, revoke.
-- `src/commit.ts` — the commitment scheme (sha256 of `code|salt|text`) and helpers.
+- `src/commit.ts` — commitment helpers (`preimageOf`, mock `persistentCommit`, category codes).
 - `src/memory.ts` — `ShieldedMemory`: wraps `MemoryStore`, never forks it.
 - `src/tools.ts` — the four agent tools.
 - `scripts/prove-local.mjs` — offline commit → prove → verify round-trip.

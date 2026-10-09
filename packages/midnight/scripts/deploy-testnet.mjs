@@ -4,7 +4,8 @@
  * proof-server adapter, then persist the contract addresses to the data dir.
  *
  * Prerequisites (see docs/MIDNIGHT.md):
- *   1. compactc builds contracts/build/vault and contracts/build/allowances
+ *   1. `compact compile` builds contracts/build/memory-vault and
+ *      contracts/build/allowance-registry
  *   2. midnight-local-dev is up, or testnet is reachable
  *   3. a proof-server adapter exposes POST /deploy { contract: "<name>" }
  *      and returns { address, txHash }
@@ -43,8 +44,8 @@ async function main() {
   if (!proofUrl) {
     console.log("MIDNIGHT_PROOF_URL is not set, so there is nothing to deploy against.\n");
     console.log("Run these instead:");
-    console.log("  compactc contracts/memory-vault.compact --output contracts/build/vault");
-    console.log("  compactc contracts/allowance-registry.compact --output contracts/build/allowances");
+    console.log("  compact compile contracts/memory-vault.compact contracts/build/memory-vault");
+    console.log("  compact compile contracts/allowance-registry.compact contracts/build/allowance-registry");
     console.log("  # start midnight-local-dev, then point MIDNIGHT_PROOF_URL at your proof-server adapter");
     process.exit(1);
   }

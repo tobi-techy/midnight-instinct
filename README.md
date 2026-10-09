@@ -28,13 +28,16 @@ The agent never holds your card. For each purchase it asks your Stripe Link wall
 
 ## Privacy (Midnight)
 
-The agent can keep your memories as **shielded commitments** on [Midnight](https://midnight.network/), so the chain never sees your words — only opaque 32-byte hashes. Ask it to prove something *about* a memory (that it exists, that it is a health note) and it produces a selective-disclosure proof that reveals nothing else. Spending can be gated the same way, against on-chain allowances.
+The agent can keep your memories as **shielded commitments** on [Midnight](https://midnight.network/), so the chain never sees your words — only opaque 32-byte commitments. Ask it to prove something *about* a memory (that it exists, that it is a health note) and it produces a selective-disclosure proof that reveals nothing else. Spending can be gated the same way, against on-chain allowances.
 
 ```bash
-node examples/midnight-demo.mjs           # offline demo, no key or wallet
+pnpm run contracts:check                    # compile both Compact contracts (toolchain 0.31.1)
+node examples/midnight-demo.mjs             # offline demo, no key or wallet
 pnpm --filter @open-instinct/midnight run test
-instinct midnight status                   # mode, contracts, anchor counts
+instinct midnight status                     # mode, contracts, anchor counts
 ```
+
+Both contracts (`memory-vault`, `allowance-registry`) compile with `compact compile` 0.31.1 and use the platform's `persistentCommit`/`disclose` idioms.
 
 Three modes: `mock` (offline, deterministic, the default), `local` (midnight-local-dev), and `testnet` (real transactions with explorer links). The layer is off unless `MIDNIGHT_MODE` is set, so enabling it never changes a normal boot. Details: [MIDNIGHT.md](docs/MIDNIGHT.md) and [ARCH-MIDNIGHT.md](docs/ARCH-MIDNIGHT.md).
 
