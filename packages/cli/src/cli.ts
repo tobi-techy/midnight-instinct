@@ -12,6 +12,7 @@ import { runDeploy } from "./commands/deploy.js";
 import { runDev } from "./commands/dev.js";
 import { runInit } from "./commands/init.js";
 import { runInvite } from "./commands/invite.js";
+import { runMidnight } from "./commands/midnight.js";
 import { runPayments } from "./commands/payments.js";
 import { runPersona } from "./commands/persona.js";
 import { runPrompt } from "./commands/prompt.js";
@@ -34,6 +35,7 @@ const COMMANDS: Record<string, Command> = {
   trust: runTrust,
   schedules: runSchedules,
   payments: runPayments,
+  midnight: runMidnight,
   persona: runPersona,
   prompt: runPrompt,
 };

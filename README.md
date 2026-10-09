@@ -26,6 +26,18 @@ Six tiers, enforced in code before any tool runs. Your partner's agent can read 
 
 The agent never holds your card. For each purchase it asks your Stripe Link wallet for a single-use card for the exact total, you approve with one tap, and the card is dead after the payment. Limits live in a spend policy file: ask above an amount, daily cap, and things that always need a yes. Without a wallet it still gets you to checkout and hands you the screen. Details: [PAYMENTS.md](docs/PAYMENTS.md).
 
+## Privacy (Midnight)
+
+The agent can keep your memories as **shielded commitments** on [Midnight](https://midnight.network/), so the chain never sees your words — only opaque 32-byte hashes. Ask it to prove something *about* a memory (that it exists, that it is a health note) and it produces a selective-disclosure proof that reveals nothing else. Spending can be gated the same way, against on-chain allowances.
+
+```bash
+node examples/midnight-demo.mjs           # offline demo, no key or wallet
+pnpm --filter @open-instinct/midnight run test
+instinct midnight status                   # mode, contracts, anchor counts
+```
+
+Three modes: `mock` (offline, deterministic, the default), `local` (midnight-local-dev), and `testnet` (real transactions with explorer links). The layer is off unless `MIDNIGHT_MODE` is set, so enabling it never changes a normal boot. Details: [MIDNIGHT.md](docs/MIDNIGHT.md) and [ARCH-MIDNIGHT.md](docs/ARCH-MIDNIGHT.md).
+
 ## Quick start
 
 Node 22.19+ and pnpm 10. You bring your own keys; [KEYS.md](docs/KEYS.md) lists which ones and how to get them. No key is stored in this repository.
@@ -75,16 +87,18 @@ packages/computer   the desktop (Maritime desktopd in the VM, or hosted Computer
 packages/apps       Composio Tool Router
 packages/network    contacts, tiers, grants, invitations, agent-to-agent tools
 packages/payments   Stripe Link wallet: one-time cards the owner approves
+packages/midnight   Midnight privacy layer: shielded memory vault, ZK proofs, ZK-gated allowances
 packages/server     the agent process (/health, /chat, /schedules)
 packages/gateway    multi-user relay and signup
 packages/cli        the instinct command
+contracts/          Compact contracts (memory-vault, allowance-registry)
 skills/             playbooks the agent follows
 docs/               architecture, permissions, protocol, keys, deploy, research
 ```
 
 ## Documentation
 
-[Architecture](docs/ARCHITECTURE.md) · [Customize](docs/CUSTOMIZE.md) · [Permissions](docs/PERMISSIONS.md) · [Protocol](docs/PROTOCOL.md) · [Keys](docs/KEYS.md) · [Deploy on Maritime](docs/DEPLOY-MARITIME.md) · [Self-host](docs/SELF-HOST.md) · [Inkbox](docs/INKBOX.md) · [Composio](docs/COMPOSIO.md) · [Payments](docs/PAYMENTS.md) · [Security](docs/SECURITY.md) · [FAQ](docs/FAQ.md) · [Examples](examples/README.md) · Research: [What Instinct is](docs/research/INSTINCT.md), [Requirements](docs/research/REQUIREMENTS.md), [Tech reference](docs/research/TECH-REFERENCE.md)
+[Architecture](docs/ARCHITECTURE.md) · [Customize](docs/CUSTOMIZE.md) · [Permissions](docs/PERMISSIONS.md) · [Protocol](docs/PROTOCOL.md) · [Keys](docs/KEYS.md) · [Deploy on Maritime](docs/DEPLOY-MARITIME.md) · [Self-host](docs/SELF-HOST.md) · [Inkbox](docs/INKBOX.md) · [Composio](docs/COMPOSIO.md) · [Payments](docs/PAYMENTS.md) · [Midnight](docs/MIDNIGHT.md) · [Midnight architecture](docs/ARCH-MIDNIGHT.md) · [Security](docs/SECURITY.md) · [FAQ](docs/FAQ.md) · [Examples](examples/README.md) · Research: [What Instinct is](docs/research/INSTINCT.md), [Requirements](docs/research/REQUIREMENTS.md), [Tech reference](docs/research/TECH-REFERENCE.md)
 
 ## Status
 

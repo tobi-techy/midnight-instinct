@@ -1,0 +1,41 @@
+// Allowance registry: ZK-gated spending and permission grants (stretch goal).
+//
+// The agent's policy engine treats a missing or unproven allowance as
+// ask/deny. This contract anchors (owner, spender, capability) allowances so a
+// spend is provably within limit without revealing the exact amount on-ledger:
+// `amount` is a witness, and the circuit only permits the transition when the
+// new total stays within the authorized max.
+//
+// Amounts are USD cents as Uint<64>; the TS client converts dollars to cents.
+// Expiry is enforced off-ledger by the agent in v0 (recorded beside the grant)
+// and moves into a ledger timestamp check once the toolchain pin supports it.
+//
+// Toolchain: compactc, pinned version in contracts/README.md. Validate with:
+//   compactc contracts/allowance-registry.compact --output contracts/build/allowances
+
+pragma language_version >= 0.17 < 0.19;
+
+export ledger limits: Map<Bytes<32>, Uint<64>>;
+export ledger spent: Map<Bytes<32>, Uint<64>>;
+export ledger active: Map<Bytes<32>, Boolean>;
+
+export circuit authorize(key: Bytes<32>, maxAmount: Uint<64>): [] {
+  assert active[key] == false;
+  assert maxAmount > 0;
+  active[key] = true;
+  limits[key] = maxAmount;
+  spent[key] = 0;
+}
+
+export circuit spend(key: Bytes<32>, witness amount: Uint<64>): [] {
+  assert active[key] == true;
+  assert amount > 0;
+  assert amount <= limits[key];
+  assert spent[key] <= limits[key] - amount;
+  spent[key] = spent[key] + amount;
+}
+
+export circuit revoke(key: Bytes<32>): [] {
+  assert active[key] == true;
+  active[key] = false;
+}

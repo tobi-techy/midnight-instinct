@@ -1,0 +1,41 @@
+// Memory vault: shielded commitments for agent memories.
+//
+// Privacy model: plaintext memories never leave the agent host. This contract
+// stores only opaque 32-byte commitments plus an ownership blinder. Wallets
+// (Lace) keep the preimage and generate the ZK proofs; the contract enforces
+// transition validity (no double-commit, ownership on attest, one attestation
+// id spent once). Selective disclosure happens off-ledger: `attest` records a
+// small disclosed category code, never the memory text.
+//
+// Toolchain: compactc, pinned version in contracts/README.md. Validate with:
+//   compactc contracts/memory-vault.compact --output contracts/build/vault
+//
+// Category codes (TS client maps labels to these; see packages/midnight):
+//   1 = medication/health, 2 = finance, 3 = contact/identity, 4 = preference, 5 = other.
+
+pragma language_version >= 0.17 < 0.19;
+
+export ledger commitments: Map<Bytes<32>, Boolean>;
+export ledger owners: Map<Bytes<32>, Field>;
+export ledger nullifiers: Map<Bytes<32>, Boolean>;
+export ledger attestations: Map<Bytes<32>, Field>;
+
+export circuit commit(commitment: Bytes<32>, ownerBlind: Field): [] {
+  assert commitments[commitment] == false;
+  commitments[commitment] = true;
+  owners[commitment] = ownerBlind;
+}
+
+export circuit attest(commitment: Bytes<32>, attestationId: Bytes<32>, disclosed: Field, witness blind: Field): [] {
+  assert commitments[commitment] == true;
+  assert nullifiers[attestationId] == false;
+  assert owners[commitment] == blind;
+  nullifiers[attestationId] = true;
+  attestations[attestationId] = disclosed;
+}
+
+export circuit revoke(commitment: Bytes<32>, witness blind: Field): [] {
+  assert commitments[commitment] == true;
+  assert owners[commitment] == blind;
+  commitments[commitment] = false;
+}

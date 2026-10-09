@@ -42,6 +42,8 @@ export interface HttpApp {
   config: InstinctConfig;
   computerKind?: string;
   appsConnected?: string[];
+  /** Midnight privacy layer status, when configured. */
+  midnight?: { mode: string; contractAddress?: string; commitments: number; attestations: number; allowances: number };
   startedAt?: number;
   modelSpec?: string;
   /** Set when the outbox buffers chat replies (ConsoleOutbox or the chat-aware Inkbox wrapper). */
@@ -257,6 +259,7 @@ export function statusJson(app: HttpApp, now: number = Date.now()): Record<strin
   };
   if (app.chatBuffer) out.pendingReplies = app.chatBuffer.pendingCounts();
   if (app.wallet) out.payments = { connected: app.wallet.isConnected() };
+  if (app.midnight) out.midnight = app.midnight;
   return out;
 }
 
@@ -323,6 +326,11 @@ export function createHttpServer(app: HttpApp, opts: HttpServerOptions = {}): ht
 
     if (method === "GET" && (path === "/" || path === "/status")) return sendJson(res, 200, { ...statusJson(app), ...(inbox ? { inkboxInbox: inbox.queue.summary() } : {}) });
     if (method === "GET" && path === "/schedules") return sendJson(res, 200, app.scheduler.toMaritimeSchedules());
+    // `instinct midnight status`. Owner surface: mode, contract addresses and anchor counts.
+    if (method === "GET" && path === "/midnight/status") {
+      if (!app.midnight) return sendJson(res, 404, { error: "midnight not configured" });
+      return sendJson(res, 200, app.midnight);
+    }
     // `instinct payments connect | status`. Owner surface: the authorize URL starts a flow this server completes.
     if (method === "GET" && path === "/oauth/link/start") {
       if (!app.wallet?.authorizeUrl) return sendJson(res, 404, { error: "payments not configured" });
