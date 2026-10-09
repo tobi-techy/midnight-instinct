@@ -159,6 +159,34 @@ instinct midnight list             # commitments so far
 instinct midnight prove 0x… --disclose health
 ```
 
+## Real deployment on Midnight
+
+The agent's `mock` mode is for demos; the contracts themselves run on a real
+network. `deploy/midnight-devnet/` is a self-contained project that boots a
+local Midnight network (node, indexer, proof server) in Docker and deploys both
+contracts to it for real:
+
+```sh
+cd deploy/midnight-devnet
+npm install
+npm run setup        # docker up + compile + deploy + commit + attest
+npm run test:e2e     # reconnects and reads the on-chain ledger
+```
+
+A verified run produced (see `deployment.json`):
+
+| Step | Evidence |
+|---|---|
+| Deploy `memory-vault` | address `cd33b0e1…b78505`, tx `00cfdfb0…f9b922c7` |
+| `commit` a memory | tx `00f80e2d…0ac6d632ba5d`, commitment `47214035…b07e630c` |
+| `attest` (category health) | tx `0071ed9d…415a70be4c` |
+| On-chain state | 1 commitment, 1 attestation, 1 nullifier |
+| Deploy `allowance-registry` | address `2d116032…2244c156` |
+
+To move to Preprod, set `BLOCKFROST_PROJECT_ID` and `MIDNIGHT_WALLET_MNEMONIC`
+and run `npm run setup -- --network preprod`; see
+`deploy/midnight-devnet/README.md`.
+
 ## Verifying a proof
 
 1. `instinct midnight list` shows each commitment with its category and tx hash.

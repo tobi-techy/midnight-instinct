@@ -35,6 +35,7 @@ pnpm run contracts:check                    # compile both Compact contracts (to
 node examples/midnight-demo.mjs             # offline demo, no key or wallet
 pnpm --filter @open-instinct/midnight run test
 instinct midnight status                     # mode, contracts, anchor counts
+cd deploy/midnight-devnet && npm run setup   # real local devnet deploy + commit + attest
 ```
 
 Both contracts (`memory-vault`, `allowance-registry`) compile with `compact compile` 0.31.1 and use the platform's `persistentCommit`/`disclose` idioms.

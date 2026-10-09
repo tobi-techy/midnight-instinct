@@ -1,0 +1,21 @@
+{
+  "version": 1,
+  "network": "undeployed",
+  "deployedAt": "2026-10-09T15:27:08.097Z",
+  "deployer": "mn_addr_undeployed1h3ssm5ru2t6eqy4g3she78zlxn96e36ms6pq996aduvmateh9p9sk96u7s",
+  "memoryVault": {
+    "address": "cd33b0e16a7a56220a49f60fe048abdd61f22beddd9bf7902979394dbbd78505",
+    "deployTx": "00cfdfb0e0f1c3ae3c1b51f83da5c1e97c516a3dd3c3ce971f43e4d925f9b922c7",
+    "deployBlock": 66,
+    "commitTx": "00f80e2d0b888e831df387671e8712bd23ea76ab70d565e76c27da0ac6d632ba5d",
+    "commitBlock": 69,
+    "commitment": "47214035ff0c5654a11ff5850deba7851b113736c709939bdb9e6e04b07e630c",
+    "attestTx": "0071ed9d141df73f04a8be6c51cd899d9c4146ccda40d2d995703e30415a70be4c",
+    "attestBlock": 72,
+    "attestationId": "9905b2a05f18ba2a47cb22798a68d5d8f3a36d16bfcc2e4ff70498c9e1069a7f"
+  },
+  "allowanceRegistry": {
+    "address": "2d116032402bb92f564d60e67384a3ffbacfa887f123d8fe96c2eea02244c156",
+    "deployTx": "004f28b9b49ace3587575a4f68d8970e166e6b8d26b152f4119a959c6e6ba39fc5"
+  }
+}
