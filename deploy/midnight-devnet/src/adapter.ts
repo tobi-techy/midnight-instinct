@@ -31,7 +31,7 @@ import { WebSocket } from 'ws';
 
 import { resolveNetwork, getOrCreateWallet } from './network';
 import { createWallet } from './wallet';
-import { ownerSecretFromSeed } from './secret';
+import { VAULT_PRIVATE_STATE_ID, vaultPrivateState, vaultWitnesses } from './witnesses';
 
 import { deployContract, findDeployedContract } from '@midnight-ntwrk/midnight-js-contracts';
 import { httpClientProofProvider } from '@midnight-ntwrk/midnight-js-http-client-proof-provider';
@@ -46,6 +46,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const VAULT_DIR = path.resolve(__dirname, '..', 'contracts', 'managed', 'memory-vault');
 const ALLOWANCE_DIR = path.resolve(__dirname, '..', 'contracts', 'managed', 'allowance-registry');
 const DEPLOYMENT_FILE = path.resolve(__dirname, '..', 'deployment.json');
+const INDEX_HTML = path.resolve(__dirname, '..', 'public', 'index.html');
 const PORT = Number(process.env.MIDNIGHT_ADAPTER_PORT ?? 6400);
 
 const hexToBytes = (h: string): Uint8Array => Uint8Array.from(Buffer.from(h.replace(/^0x/, ''), 'hex'));
@@ -129,25 +130,22 @@ async function main(): Promise<void> {
   await ctx.wallet.waitForSyncedState();
   console.log('Adapter: wallet synced.');
 
-  const ownerSecret = ownerSecretFromSeed(WALLET.seed);
+  const privateState = vaultPrivateState(WALLET.seed);
   const vaultMod = await loadModule(VAULT_DIR);
 
   // Discover any existing vault private state in the store: if the store does
   // not yet hold ownerSecret, findDeployedContract seeds it from the value we
   // pass, so the deploy-time binding can be re-proven.
   const vaultCompiled = CompiledContract.make('memory-vault', vaultMod.Contract as never).pipe(
-    CompiledContract.withWitnesses({
-      ownerSecret: ({ privateState }: { privateState: { ownerSecret: Uint8Array } }) =>
-        [privateState, privateState.ownerSecret] as [unknown, Uint8Array],
-    } as never),
+    CompiledContract.withWitnesses(vaultWitnesses() as never),
     CompiledContract.withCompiledFileAssets(VAULT_DIR),
   );
   const vaultProviders = providerSet(ctx, config, 'memory-vault', VAULT_DIR);
   const vault = await findDeployedContract(vaultProviders as never, {
     contractAddress: vaultAddress,
     compiledContract: vaultCompiled as never,
-    privateStateId: 'memoryVaultPrivateState',
-    initialPrivateState: { ownerSecret },
+    privateStateId: VAULT_PRIVATE_STATE_ID,
+    initialPrivateState: privateState,
   } as never);
   console.log(`Adapter: vault handle ready at ${vaultAddress}`);
 
@@ -173,13 +171,40 @@ async function main(): Promise<void> {
   }
 
   const server = createServer(async (req, res) => {
-    const url = req.url ?? '/';
-    if (req.method === 'GET' && url === '/health') {
-      return send(res, 200, { status: 'ok', mode: network, vault: vaultAddress });
-    }
-    if (req.method !== 'POST') return send(res, 404, { error: 'not found' });
+    const url = (req.url ?? '/').split('?')[0];
+
+    const readState = async () => {
+      const st = await vaultProviders.publicDataProvider.queryContractState(vaultAddress);
+      const l = vaultMod.ledger((st as { data: unknown }).data) as {
+        commitments: { size(): bigint; [Symbol.iterator](): Iterator<[Uint8Array, Uint8Array]> };
+        attestations: { size(): bigint; [Symbol.iterator](): Iterator<[Uint8Array, bigint]> };
+        nullifiers: { size(): bigint };
+      };
+      return {
+        network,
+        vault: vaultAddress,
+        commitments: [...l.commitments].map(([k]) => bytesToHex(k)),
+        attestations: [...l.attestations].map(([k, v]) => ({ id: bytesToHex(k), category: Number(v) })),
+        nullifiers: Number(l.nullifiers.size()),
+      };
+    };
 
     try {
+      if (req.method === 'GET' && url === '/health') {
+        return send(res, 200, { status: 'ok', mode: network, vault: vaultAddress });
+      }
+      if (req.method === 'GET' && url === '/state') {
+        return send(res, 200, await readState());
+      }
+      if (req.method === 'GET' && (url === '/' || url === '/index.html')) {
+        if (fs.existsSync(INDEX_HTML)) {
+          res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' });
+          return res.end(fs.readFileSync(INDEX_HTML));
+        }
+        return send(res, 404, { error: 'console not found' });
+      }
+      if (req.method !== 'POST') return send(res, 404, { error: 'not found' });
+
       const body = await readBody(req);
       switch (url) {
         case '/commit': {

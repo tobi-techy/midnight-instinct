@@ -19,7 +19,7 @@ import * as Rx from 'rxjs';
 
 import { resolveNetwork, getOrCreateWallet, formatWalletBackupNotice } from './network';
 import { createWallet, persistWalletState, unshieldedToken, type WalletContext } from './wallet';
-import { ownerSecretFromSeed } from './secret';
+import { VAULT_PRIVATE_STATE_ID, vaultPrivateState, vaultWitnesses } from './witnesses';
 
 import { deployContract, findDeployedContract } from '@midnight-ntwrk/midnight-js-contracts';
 import { httpClientProofProvider } from '@midnight-ntwrk/midnight-js-http-client-proof-provider';
@@ -165,13 +165,10 @@ async function main(): Promise<void> {
   const allowanceMod = await loadContract(ALLOWANCE_DIR);
 
   // ── Memory vault: deploy, then a real commit -> attest round-trip ──────────
-  const ownerSecret = ownerSecretFromSeed(WALLET.seed);
-  const vaultWitnesses = {
-    ownerSecret: ({ privateState }: { privateState: { ownerSecret: Uint8Array } }) =>
-      [privateState, privateState.ownerSecret] as [unknown, Uint8Array],
-  };
+  const privateState = vaultPrivateState(WALLET.seed);
+  const vaultWitnessesImpl = vaultWitnesses();
   const vaultCompiled = CompiledContract.make('memory-vault', vaultMod.Contract as never).pipe(
-    CompiledContract.withWitnesses(vaultWitnesses as never),
+    CompiledContract.withWitnesses(vaultWitnessesImpl as never),
     CompiledContract.withCompiledFileAssets(VAULT_DIR),
   );
   const vaultProviders = contractProviders(ctx, networkConfig, 'memory-vault', VAULT_DIR);
@@ -180,8 +177,8 @@ async function main(): Promise<void> {
   const vaultDeployed = await deployContract(vaultProviders, {
     compiledContract: vaultCompiled as never,
     args: [],
-    privateStateId: 'memoryVaultPrivateState',
-    initialPrivateState: { ownerSecret },
+    privateStateId: VAULT_PRIVATE_STATE_ID,
+    initialPrivateState: privateState,
   } as never);
   const vaultAddress = vaultDeployed.deployTxData.public.contractAddress;
   console.log(`  address: ${vaultAddress}`);
@@ -190,8 +187,8 @@ async function main(): Promise<void> {
   const vault = await findDeployedContract(vaultProviders as never, {
     contractAddress: vaultAddress,
     compiledContract: vaultCompiled as never,
-    privateStateId: 'memoryVaultPrivateState',
-    initialPrivateState: { ownerSecret },
+    privateStateId: VAULT_PRIVATE_STATE_ID,
+    initialPrivateState: privateState,
   } as never);
 
   const memoryText = 'I take medication X daily';

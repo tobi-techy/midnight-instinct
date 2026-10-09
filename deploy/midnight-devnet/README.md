@@ -70,6 +70,31 @@ node packages/midnight/scripts/adapter-roundtrip.mjs
 
 That drives the agent's own client through a real commit → attest round-trip.
 
+## Web console
+
+The adapter also serves a runnable console at <http://127.0.0.1:6400>:
+
+- commit a memory — the browser hashes it locally and sends only the digest and
+  a random salt, so the words never leave the page;
+- see the live on-chain state (commitments, attestations, nullifiers) read from
+  the indexer;
+- generate a selective-disclosure proof for any commitment and watch the tx.
+
+## Simulator tests
+
+`npm test` drives the vault circuits through the Compact runtime with no
+network, proof server or wallet. It asserts the real semantics: bind-once
+commitments, `persistentCommit` hiding, owner binding, single-use nullifiers and
+revocation. `src/witnesses.ts` holds the private-state witness the circuits use.
+
+## Tests (three layers)
+
+| Command | Layer | Needs |
+|---|---|---|
+| `npm test` | circuits via the Compact runtime (simulator) | nothing |
+| `npm run test:e2e` | deployed contract read through the indexer | running devnet |
+| `npm run deploy` | full deploy + real commit → attest txs | running devnet |
+
 `npm run setup` starts only what the target network needs, compiles both
 contracts, and deploys. The local chain is ephemeral: `docker compose down -v`
 wipes it and you get fresh ids.
@@ -106,9 +131,12 @@ register for DUST, then look the contract up on
 
 - `src/wallet.ts`, `src/wallet-state.ts` — wallet construction and sync-state cache.
 - `src/network.ts` — per-network endpoints, wallet seeds, Blockfrost token wiring.
+- `src/witnesses.ts` — the vault's Compact witness (private state).
 - `src/deploy.ts` — deploys both contracts and runs commit → attest.
-- `src/adapter.ts` — the REST service the agent's runtime client calls.
+- `src/adapter.ts` — the REST service the agent's runtime client calls, plus the console.
 - `src/secret.ts` — the deterministic owner secret shared by deploy and adapter.
+- `public/index.html` — the runnable web console.
+- `test/vault.sim.test.ts` — simulator tests over the compiled circuits.
 - `scripts/e2e-check.ts` — reconnects and asserts on-chain state.
 - `docker-compose.yml` — the local node, indexer and proof server.
 

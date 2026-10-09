@@ -1,0 +1,273 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Instinct Vault · Midnight console</title>
+    <style>
+      :root {
+        --bg: #0b0d12;
+        --panel: #141821;
+        --panel-2: #1b202c;
+        --line: #262c3a;
+        --text: #e7ebf3;
+        --muted: #9aa4b8;
+        --accent: #7c9cff;
+        --ok: #4ade80;
+        --warn: #fbbf24;
+        --mono: ui-monospace, SFMono-Regular, Menlo, monospace;
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        background: var(--bg);
+        color: var(--text);
+        font: 15px/1.5 system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+      }
+      header {
+        display: flex; align-items: center; justify-content: space-between;
+        gap: 16px; padding: 18px 24px; border-bottom: 1px solid var(--line);
+        flex-wrap: wrap;
+      }
+      header h1 { font-size: 17px; margin: 0; font-weight: 600; letter-spacing: -0.01em; }
+      header h1 span { color: var(--accent); }
+      .badges { display: flex; gap: 8px; flex-wrap: wrap; }
+      .badge {
+        font: 12px/1 var(--mono); padding: 6px 10px; border: 1px solid var(--line);
+        border-radius: 999px; color: var(--muted); background: var(--panel);
+      }
+      .badge b { color: var(--text); font-weight: 600; }
+      main {
+        display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, 0.9fr);
+        gap: 20px; padding: 24px; max-width: 1180px; margin: 0 auto;
+      }
+      @media (max-width: 880px) { main { grid-template-columns: 1fr; } }
+      .card {
+        background: var(--panel); border: 1px solid var(--line);
+        border-radius: 14px; padding: 18px 18px 20px;
+      }
+      .card h2 { margin: 0 0 4px; font-size: 14px; font-weight: 600; }
+      .card p.sub { margin: 0 0 16px; color: var(--muted); font-size: 13px; }
+      label { display: block; font-size: 12px; color: var(--muted); margin: 12px 0 6px; }
+      textarea, select, input {
+        width: 100%; background: var(--panel-2); border: 1px solid var(--line);
+        color: var(--text); border-radius: 9px; padding: 10px 12px; font: inherit;
+      }
+      textarea { min-height: 74px; resize: vertical; }
+      button {
+        margin-top: 14px; width: 100%; border: 0; border-radius: 9px; padding: 11px 14px;
+        background: var(--accent); color: #0b1020; font-weight: 650; font: inherit; cursor: pointer;
+      }
+      button.secondary { background: transparent; border: 1px solid var(--line); color: var(--text); }
+      button:disabled { opacity: 0.5; cursor: default; }
+      .row { display: flex; gap: 12px; }
+      .row > * { flex: 1; }
+      .kv { display: grid; grid-template-columns: 96px 1fr; gap: 6px 12px; font-size: 13px; }
+      .kv dt { color: var(--muted); }
+      .kv dd { margin: 0; font-family: var(--mono); font-size: 12px; word-break: break-all; }
+      .list { margin-top: 14px; display: flex; flex-direction: column; gap: 10px; }
+      .item {
+        background: var(--panel-2); border: 1px solid var(--line); border-radius: 10px;
+        padding: 12px; display: flex; flex-direction: column; gap: 8px;
+      }
+      .mono { font-family: var(--mono); font-size: 12px; word-break: break-all; }
+      .muted { color: var(--muted); }
+      .ok { color: var(--ok); }
+      .warn { color: var(--warn); }
+      .split { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; font-size: 13px; }
+      .split div { background: var(--panel-2); border: 1px solid var(--line); border-radius: 10px; padding: 12px; }
+      .split h3 { margin: 0 0 8px; font-size: 12px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); }
+      ul { margin: 0; padding-left: 18px; }
+      li { margin: 4px 0; }
+      .toast { min-height: 20px; font-size: 13px; margin-top: 12px; }
+      a { color: var(--accent); }
+    </style>
+  </head>
+  <body>
+    <header>
+      <h1>Instinct <span>Vault</span> · Midnight console</h1>
+      <div class="badges">
+        <span class="badge">network <b id="network">…</b></span>
+        <span class="badge">contract <b id="vault">…</b></span>
+        <span class="badge">commitments <b id="cCount">–</b></span>
+        <span class="badge">proofs <b id="aCount">–</b></span>
+      </div>
+    </header>
+
+    <main>
+      <section class="card">
+        <h2>Commit a memory</h2>
+        <p class="sub">
+          The text is hashed in your browser. Only the hash and a random salt are sent to the
+          local proof server — the words never leave this page.
+        </p>
+        <label for="text">Memory</label>
+        <textarea id="text" placeholder="I take medication X daily">I take medication X daily</textarea>
+        <label for="category">Category (disclosed on proof)</label>
+        <select id="category">
+          <option value="1">health</option>
+          <option value="2">finance</option>
+          <option value="3">contact</option>
+          <option value="4">preference</option>
+          <option value="5" selected>other</option>
+        </select>
+        <button id="commit">Commit privately</button>
+        <div class="toast" id="commitOut"></div>
+      </section>
+
+      <section class="card">
+        <h2>On-chain state</h2>
+        <p class="sub">Read from the indexer. Commitments are opaque hashes; proofs reveal only a category.</p>
+        <div class="list" id="stateList"><p class="muted">Loading…</p></div>
+        <button class="secondary" id="refresh">Refresh</button>
+      </section>
+
+      <section class="card">
+        <h2>Privacy boundary</h2>
+        <p class="sub">What the agent keeps versus what Midnight learns.</p>
+        <div class="split">
+          <div>
+            <h3>Stays local</h3>
+            <ul>
+              <li>Memory text</li>
+              <li>Preimage (sha256 of the text)</li>
+              <li>Salt</li>
+              <li>Owner secret (witness)</li>
+            </ul>
+          </div>
+          <div>
+            <h3>On-chain</h3>
+            <ul>
+              <li>Commitment <span class="mono">persistentCommit(preimage, salt)</span></li>
+              <li>Owner binding (a commitment)</li>
+              <li>Disclosed category (1–5)</li>
+              <li>Single-use nullifier</li>
+            </ul>
+          </div>
+        </div>
+      </section>
+
+      <section class="card">
+        <h2>How a proof works</h2>
+        <p class="sub">
+          A verifier asks a yes/no question about a memory. The circuit answers it and writes only
+          the category and a nullifier; the text is never revealed and the proof cannot be replayed.
+        </p>
+        <dl class="kv">
+          <dt>commit</dt><dd>store persistentCommit(text, salt)</dd>
+          <dt>attest</dt><dd>disclose category, burn nullifier</dd>
+          <dt>revoke</dt><dd>retire a memory so it can't be proven</dd>
+        </dl>
+      </section>
+    </main>
+
+    <script>
+      const $ = (id) => document.getElementById(id);
+      const hex = (u8) => [...u8].map((b) => b.toString(16).padStart(2, "0")).join("");
+      const short = (s) => (s.length > 22 ? s.slice(0, 12) + "…" + s.slice(-8) : s);
+      const CAT = { 1: "health", 2: "finance", 3: "contact", 4: "preference", 5: "other" };
+
+      async function sha256Hex(text) {
+        const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(text));
+        return hex(new Uint8Array(buf));
+      }
+
+      async function api(path, body) {
+        const res = await fetch(path, {
+          method: body ? "POST" : "GET",
+          headers: body ? { "content-type": "application/json" } : undefined,
+          body: body ? JSON.stringify(body) : undefined,
+        });
+        const json = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(json.error || `HTTP ${res.status}`);
+        return json;
+      }
+
+      async function refresh() {
+        try {
+          const s = await api("/state");
+          $("network").textContent = s.network;
+          $("vault").textContent = short(s.vault);
+          $("cCount").textContent = s.commitments.length;
+          $("aCount").textContent = s.attestations.length;
+          const proven = new Set(s.attestations.map((a) => a.category));
+          const list = $("stateList");
+          if (!s.commitments.length) {
+            list.innerHTML = '<p class="muted">No commitments yet — commit a memory on the left.</p>';
+            return;
+          }
+          list.innerHTML = s.commitments
+            .map(
+              (c) => `
+              <div class="item">
+                <div class="mono">${c}</div>
+                <div class="row" style="align-items:center">
+                  <select data-commitment="${c}">
+                    <option value="0">prove existence</option>
+                    <option value="1">prove health</option>
+                    <option value="2">prove finance</option>
+                    <option value="3">prove contact</option>
+                    <option value="4">prove preference</option>
+                    <option value="5">prove other</option>
+                  </select>
+                  <button class="secondary" style="margin:0" data-prove="${c}">Generate proof</button>
+                </div>
+                <div class="mono muted" data-out="${c}"></div>
+              </div>`,
+            )
+            .join("");
+          if (proven.size) list.insertAdjacentHTML("afterbegin", "");
+        } catch (err) {
+          $("stateList").innerHTML = `<p class="warn">${err.message}</p>`;
+        }
+      }
+
+      $("commit").addEventListener("click", async () => {
+        const btn = $("commit");
+        btn.disabled = true;
+        $("commitOut").textContent = "Committing…";
+        try {
+          const text = $("text").value;
+          const preimage = await sha256Hex(text);
+          const salt = hex(crypto.getRandomValues(new Uint8Array(32)));
+          const out = await api("/commit", { contract: "memory-vault", preimage, salt });
+          $("commitOut").innerHTML =
+            `<span class="ok">Committed.</span> commitment <span class="mono">${short(out.commitment)}</span><br>` +
+            `tx <span class="mono">${out.txHash}</span>`;
+          await refresh();
+        } catch (err) {
+          $("commitOut").innerHTML = `<span class="warn">${err.message}</span>`;
+        } finally {
+          btn.disabled = false;
+        }
+      });
+
+      $("stateList").addEventListener("click", async (ev) => {
+        const c = ev.target.getAttribute("data-prove");
+        if (!c) return;
+        const sel = document.querySelector(`select[data-commitment="${c}"]`);
+        const category = Number(sel.value);
+        const out = document.querySelector(`[data-out="${c}"]`);
+        out.textContent = "Proving…";
+        try {
+          const attestationId = hex(crypto.getRandomValues(new Uint8Array(32)));
+          const res = await api("/attest", {
+            contract: "memory-vault",
+            commitment: c,
+            attestationId,
+            category,
+          });
+          out.innerHTML = `<span class="ok">Proof recorded</span> · verifier learns ${
+            category === 0 ? "existence only" : CAT[category]
+          } · tx ${res.txHash}`;
+          await refresh();
+        } catch (err) {
+          out.innerHTML = `<span class="warn">${err.message}</span>`;
+        }
+      });
+
+      $("refresh").addEventListener("click", refresh);
+      refresh();
+    </script>
+  </body>
+</html>

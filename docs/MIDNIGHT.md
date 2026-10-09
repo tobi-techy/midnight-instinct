@@ -8,6 +8,9 @@ anchored on [Midnight](https://midnight.network/).
 The whole point in one sentence: **the agent's words never leave the host; the
 chain only ever sees opaque 32-byte commitments.**
 
+For the full inventory of what is private, what is public, and why, see
+[PRIVACY-MODEL.md](PRIVACY-MODEL.md).
+
 ## Why this exists
 
 A personal agent is only trustworthy if its memory stays private. Storing notes
