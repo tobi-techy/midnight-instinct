@@ -67,7 +67,11 @@ export circuit attest(c: Bytes<32>, attestationId: Bytes<32>, category: Uint<8>)
     commitments.lookup(key) == persistentCommit<Bytes<32>>(ownerSecret(), c),
     "not the owner of this commitment"
   );
-  if (category != 0) {
+  // 0 = bare existence: it reveals nothing, so the owner may always make it.
+  // Whether a proof is a category proof or a bare existence proof is public
+  // anyway (the ledger records the code), so the branch itself is disclosed;
+  // inside it, the code must be the one this memory was committed with.
+  if (disclose(category != 0)) {
     assert(
       categories.lookup(key) == persistentCommit<Uint<8>>(category, key),
       "category does not match this memory"
