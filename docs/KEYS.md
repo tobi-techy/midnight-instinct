@@ -119,6 +119,7 @@ the screen at checkout instead of paying.
 | `BRAVE_SEARCH_API_KEY` | Better web search than the DuckDuckGo fallback | [brave.com/search/api](https://brave.com/search/api/) |
 | `INSTINCT_CHAT_TOKEN` | A bearer token on the owner's HTTP surface; set it whenever the port is reachable beyond your machine | you choose it |
 | `GATEWAY_SIGNUP_SECRET` | The invite code the gateway's signup form requires | you choose it |
+| `MIDNIGHT_MODE`, `MIDNIGHT_PROOF_URL`, `MIDNIGHT_CONTRACT_ADDRESS`, `MIDNIGHT_ALLOWANCE_ADDRESS`, `MIDNIGHT_EXPLORER_URL` | The optional Midnight privacy layer: shielded memory anchors, selective-disclosure proofs and ZK-gated allowances. Unset (the default) leaves the layer off and changes nothing | [MIDNIGHT.md](MIDNIGHT.md); example in [`deploy/.env.example`](../deploy/.env.example) |
 
 ## 8. Where keys live, and what never goes in git
 

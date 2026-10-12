@@ -6,6 +6,9 @@
  * deployed contract handles, and turns each request into a real circuit call,
  * returning a transaction id. The agent process never holds a seed phrase.
  *
+ * Every POST must be same-origin JSON: the adapter has no other token, and each
+ * write submits a real transaction from its wallet.
+ *
  * Run it after `npm run setup` (which writes deployment.json):
  *   npm run adapter
  *
@@ -15,7 +18,7 @@
  *   MIDNIGHT_CONTRACT_ADDRESS=<memoryVault.address>
  *
  * Endpoints:
- *   POST /commit              { contract, preimage, salt }              -> { commitment, txHash }
+ *   POST /commit              { contract, preimage, salt, category }     -> { commitment, txHash }
  *   POST /attest              { commitment, attestationId, category }   -> { txHash }
  *   POST /allowance/authorize { key, maxAmount }                        -> { txHash }
  *   POST /allowance/spend     { key, amount }                           -> { txHash }
@@ -31,7 +34,14 @@ import { WebSocket } from 'ws';
 
 import { resolveNetwork, getOrCreateWallet } from './network';
 import { createWallet } from './wallet';
-import { VAULT_PRIVATE_STATE_ID, vaultPrivateState, vaultWitnesses } from './witnesses';
+import {
+  ALLOWANCE_PRIVATE_STATE_ID,
+  VAULT_PRIVATE_STATE_ID,
+  allowancePrivateState,
+  allowanceWitnesses,
+  vaultPrivateState,
+  vaultWitnesses,
+} from './witnesses';
 
 import { deployContract, findDeployedContract } from '@midnight-ntwrk/midnight-js-contracts';
 import { httpClientProofProvider } from '@midnight-ntwrk/midnight-js-http-client-proof-provider';
@@ -48,6 +58,7 @@ const ALLOWANCE_DIR = path.resolve(__dirname, '..', 'contracts', 'managed', 'all
 const DEPLOYMENT_FILE = path.resolve(__dirname, '..', 'deployment.json');
 const INDEX_HTML = path.resolve(__dirname, '..', 'public', 'index.html');
 const PORT = Number(process.env.MIDNIGHT_ADAPTER_PORT ?? 6400);
+const ADAPTER_ORIGINS = [`http://127.0.0.1:${PORT}`, `http://localhost:${PORT}`];
 
 const hexToBytes = (h: string): Uint8Array => Uint8Array.from(Buffer.from(h.replace(/^0x/, ''), 'hex'));
 const bytesToHex = (u8: Uint8Array): string => Buffer.from(u8).toString('hex');
@@ -154,15 +165,15 @@ async function main(): Promise<void> {
     try {
       const allowanceMod = await loadModule(ALLOWANCE_DIR);
       const allowanceCompiled = CompiledContract.make('allowance-registry', allowanceMod.Contract as never).pipe(
-        CompiledContract.withVacantWitnesses,
+        CompiledContract.withWitnesses(allowanceWitnesses() as never),
         CompiledContract.withCompiledFileAssets(ALLOWANCE_DIR),
       );
       const allowanceProviders = providerSet(ctx, config, 'allowance-registry', ALLOWANCE_DIR);
       allowance = await findDeployedContract(allowanceProviders as never, {
         contractAddress: allowanceAddress,
         compiledContract: allowanceCompiled as never,
-        privateStateId: 'allowanceRegistryPrivateState',
-        initialPrivateState: {},
+        privateStateId: ALLOWANCE_PRIVATE_STATE_ID,
+        initialPrivateState: allowancePrivateState(WALLET.seed),
       } as never);
       console.log(`Adapter: allowance handle ready at ${allowanceAddress}`);
     } catch (err) {
@@ -205,12 +216,28 @@ async function main(): Promise<void> {
       }
       if (req.method !== 'POST') return send(res, 404, { error: 'not found' });
 
+      // A page in the owner's browser can POST here without a CORS preflight by
+      // using a simple content type, and every request to /commit or /attest
+      // submits a real transaction from the adapter's wallet. Require a JSON
+      // request from the adapter's own origin.
+      const contentType = String(req.headers['content-type'] ?? '').toLowerCase();
+      if (!contentType.startsWith('application/json')) {
+        return send(res, 415, { error: 'content-type must be application/json' });
+      }
+      const origin = req.headers.origin;
+      if (origin && !ADAPTER_ORIGINS.includes(String(origin))) {
+        return send(res, 403, { error: 'cross-origin request refused' });
+      }
+
       const body = await readBody(req);
       switch (url) {
         case '/commit': {
           const preimage = hexToBytes(String(body.preimage));
           const salt = hexToBytes(String(body.salt));
-          const call = await vault.callTx.commit(preimage as never, salt as never);
+          // The circuit binds the category to the commitment; the client sends
+          // the small code it derived from the memory's category label.
+          const category = BigInt(Number(body.category ?? 0));
+          const call = await vault.callTx.commit(preimage as never, salt as never, category as never);
           return send(res, 200, {
             commitment: bytesToHex(call.private.result as Uint8Array),
             txHash: call.public.txId,

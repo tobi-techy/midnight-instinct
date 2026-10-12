@@ -47,18 +47,29 @@ names and argument shapes documented in each file header.
   `disclose()`, because it is hiding by construction.
 - The owner binding is `persistentCommit(ownerSecret, commitment)`: a witness
   supplies `ownerSecret`, so the ledger never learns who owns which memory.
+- The category is bound at commit time as `persistentCommit(category,
+  commitment)`, a second hiding commitment keyed by the memory's commitment.
+  `attest` re-checks the disclosed code against it, so a proof can only claim
+  the category the memory was committed with. A proof of bare existence passes
+  `category = 0` and skips that check, revealing nothing extra.
 - `attest` discloses only the category code and nullifies the attestation id on
   use, so a proof is single-use and reveals nothing but the category.
 - Allowance limits and running totals are public (an allowance is a statement);
   what the circuit guarantees is that no spend can push the total past the
   limit, which the agent cannot forge even if prompt-injected.
+- Every allowance circuit (`authorize`, `spend`, `revoke`) is bound to the same
+  `ownerSecret` witness: `authorize` stores `persistentCommit(ownerSecret, key)`
+  and the other two only verify when the caller reproduces it. Without that, a
+  public key read off the ledger would be enough to revoke, drain or
+  re-authorize someone else's allowance.
 
 ## What stays off-ledger
 
 Memory text, the owner's vault secret and the salt never appear on-ledger. The
-chain holds commitments, an owner binding, category codes and running spend
-totals. Preimages live in the agent host vault and the owner's device, which is
-where proofs are generated.
+chain holds commitments, owner bindings, a hiding commitment to each memory's
+category (the plain code appears only when the owner attests it), and running
+spend totals. Preimages live in the agent host vault and the owner's device,
+which is where proofs are generated.
 
 ## Build
 

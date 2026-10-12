@@ -19,6 +19,7 @@ explicit `disclose()` at a ledger write or circuit return.
 | Commitment | Public (safe) | Midnight ledger | The anchor everyone references; opaque | `persistentCommit(preimage, salt)` output |
 | Owner binding | Public (safe) | Midnight ledger | Lets the owner re-prove control without revealing who they are | `persistentCommit(ownerSecret, commitment)` |
 | Category code (1–5) | **Disclosed on proof by choice** | Midnight ledger | This is the single fact the verifier asked for | `disclose(category)` in `attest` |
+| Category binding | Public (safe) | Midnight ledger | Lets `attest` check that the disclosed code is the one the memory was committed with, without revealing the category at commit time | `persistentCommit(category, commitment)` written in `commit`, re-checked in `attest` |
 | Attestation nullifier | Public (safe) | Midnight ledger | Makes a proof single-use so it cannot be replayed | Set to `true` in `attest`; reuse is rejected |
 | Revocation flag | Public (safe) | Midnight ledger | Lets the owner retire a memory | `active[commitment] = false` in `revoke` |
 
@@ -26,6 +27,8 @@ explicit `disclose()` at a ledger write or circuit return.
 
 | Data | Class | Why | Mechanism |
 |---|---|---|---|
+| Owner secret | **Private** | Binds each allowance circuit to its owner; leaking it lets others spend, revoke or re-authorize | Supplied by a witness; hashed into the allowance owner binding |
+| Allowance owner binding | Public (safe) | Stops anyone who reads a public key off the ledger from spending, revoking or resetting an allowance | `persistentCommit(ownerSecret, key)`, written at first `authorize` and re-checked in `authorize`, `spend` and `revoke` |
 | Authorized maximum | **Public by design** | An allowance is a statement, like a card limit | `limits[key]`, written with `disclose(maxAmount)` |
 | Running total | **Public by design** | Inferable from a public limit plus spends; we publish it honestly | `spent[key]` |
 | Individual spend amount | **Public via the total** | Cannot be hidden while the running total is public; we disclose it rather than pretend | `disclose(amount)` in `spend` |
@@ -51,6 +54,8 @@ boundary:
 | A verifier | Learn the memory text or any other category | Only the disclosed category and a nullifier are written |
 | A verifier replaying a proof | Reuse one attestation as two | The attestation id is nullified on first use |
 | Another user of the same contract | Commit or attest against the owner's memories | Owner binding is a commitment to a witness-held secret |
+| Another user of the same contract | Spend, revoke or re-authorize (resetting `spent`) the owner's allowance | Every allowance circuit re-checks the owner binding against a witness-held secret |
+| A verifier | Learn a category the memory was not committed with | The category binding is checked inside `attest`, so a substituted code fails the proof |
 | A prompt-injected agent | Overspend an allowance | The limit is enforced by the circuit, not by agent code |
 | Someone with the ledger | Open a commitment | It is a hiding commitment; the preimage and salt stay local |
 | The network | See witnesses | The proof server holds witnesses and runs on the owner's machine |
@@ -59,6 +64,6 @@ boundary:
 ## Where each guarantee is implemented
 
 - Contract: `contracts/memory-vault.compact`, `contracts/allowance-registry.compact`
-- Witnesses: `deploy/midnight-devnet/src/witnesses.ts`
+- Witnesses: `deploy/midnight-devnet/src/witnesses.ts` (the vault's owner secret and the allowance registry's)
 - Off-chain semantics: `deploy/midnight-devnet/test/vault.sim.test.ts` (simulator)
 - Live transactions: `deploy/midnight-devnet/src/deploy.ts`, `src/adapter.ts`

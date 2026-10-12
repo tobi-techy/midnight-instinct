@@ -8,6 +8,7 @@ import {
   MidnightClient,
   ShieldedMemory,
   newPersistedState,
+  normalizeState,
   type PersistedState,
 } from "../src/index.js";
 
@@ -34,7 +35,8 @@ describe("commitment scheme", () => {
     expect(c.commitment).not.toBe(a.commitment);
     const d = await client.commit({ text: "I take medication X", category: "health", salt: "other-salt" });
     expect(d.commitment).not.toBe(a.commitment);
-    // The category is disclosed at proof time, not baked into the commitment.
+    // The category is not baked into the commitment; the circuit binds it as a
+    // separate ledger entry, so the commitment itself is category-independent.
     const e = await client.commit({ text: "I take medication X", category: "finance", salt: "fixed" });
     expect(e.commitment).toBe(a.commitment);
   });
@@ -73,6 +75,16 @@ describe("selective disclosure", () => {
     const proof = await client.prove({ commitment: committed.commitment });
     expect(proof.disclosed).toBe(0);
     expect(proof.disclosedLabel).toBe("existence");
+  });
+
+  it("refuses to disclose a category the memory was not committed as", async () => {
+    const { client } = makeClient();
+    const committed = await client.commit({ text: "I take medication X", category: "health" });
+    await expect(
+      client.prove({ commitment: committed.commitment, disclose: "finance" }),
+    ).rejects.toThrow(/committed as health/);
+    // Bare existence reveals nothing, so it stays available.
+    await expect(client.prove({ commitment: committed.commitment })).resolves.toBeTruthy();
   });
 
   it("refuses to prove an unknown commitment", async () => {
@@ -153,6 +165,30 @@ describe("persistence and shielded memory", () => {
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
+  });
+});
+
+describe("state loading", () => {
+  it("fills in anchor maps a deployment file never had", () => {
+    // What `deploy-testnet.mjs` used to write: deployment metadata, no maps.
+    const deployed = { version: 1, mode: "testnet", vaultKey: "", contractAddress: "0xabc" };
+    const state = normalizeState(deployed, "k");
+    expect(state.commitments).toEqual({});
+    expect(state.nullifiers).toEqual({});
+    expect(state.allowances).toEqual({});
+    expect(state.vaultKey).toBe("k");
+    const client = new MidnightClient({ env: { mode: "mock" }, state, vaultKey: "k", save: () => {} });
+    expect(() => client.status()).not.toThrow();
+    expect(client.status().commitments).toBe(0);
+  });
+
+  it("keeps the maps of a real state file", async () => {
+    let state: PersistedState = newPersistedState("k");
+    const client = new MidnightClient({ env: { mode: "mock" }, state, vaultKey: "k", save: (s) => (state = s) });
+    const c = await client.commit({ text: "note", category: "other" });
+    const reloaded = new MidnightClient({ env: { mode: "mock" }, state, vaultKey: "k", save: () => {} });
+    expect(reloaded.hasCommitment(c.commitment)).toBe(true);
+    expect(reloaded.status().commitments).toBe(1);
   });
 });
 

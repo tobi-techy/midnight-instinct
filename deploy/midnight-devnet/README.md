@@ -66,7 +66,7 @@ cd deploy/midnight-devnet
 #    MIDNIGHT_WALLET_MNEMONIC="word word … word"   # optional; omit to generate one
 set -a; source .env.preprod; set +a
 
-npm run address        # prints the wallet address (and persists a generated seed)
+npm run address -- --network preprod   # prints the deployment wallet address (and persists a generated seed)
 # 2. Fund that address from the Preprod faucet, then:
 npm run setup -- --network preprod   # proof server + compile + deploy
 ```

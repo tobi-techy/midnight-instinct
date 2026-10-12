@@ -10,6 +10,7 @@ import {
   MidnightClient,
   midnightEnv,
   newPersistedState,
+  normalizeState,
   type PersistedState,
 } from "@open-instinct/midnight";
 import { parse, str, type OptionSpec } from "../args.js";
@@ -23,9 +24,10 @@ export const midnightOptions: OptionSpec = {
 };
 
 function readState(ctx: CliContext): PersistedState {
-  const raw = ctx.state().readJson<PersistedState | undefined>(MIDNIGHT_STATE_FILE, undefined);
-  if (raw && typeof raw === "object" && raw.version === 1) return raw;
-  return newPersistedState("");
+  const raw = ctx.state().readJson<unknown>(MIDNIGHT_STATE_FILE, undefined);
+  // The same file may have been written by a deploy script (deployment metadata,
+  // no anchor maps), so fill the maps in rather than reading them as present.
+  return normalizeState(raw, "");
 }
 
 function clientOf(ctx: CliContext, state: PersistedState): MidnightClient {

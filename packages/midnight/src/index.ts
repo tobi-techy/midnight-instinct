@@ -22,6 +22,7 @@ export {
 export {
   MidnightClient,
   newPersistedState,
+  normalizeState,
   type CommitInput,
   type CommitResult,
   type MidnightClientOptions,

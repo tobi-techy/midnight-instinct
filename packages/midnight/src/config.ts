@@ -19,7 +19,8 @@ export const MIDNIGHT_STATE_FILE = "midnight.json";
 
 export interface MidnightEnv {
   mode: MidnightMode;
-  /** Base URL of the proof-server adapter, e.g. http://127.0.0.1:6300. Required for local/testnet. */
+  /** Base URL of the proof-server adapter, e.g. http://127.0.0.1:6400. Required for local/testnet. */
+  /* The adapter listens on 6400; 6300 is the ZK proof server it proves through. */
   proofUrl?: string;
   /** Deployed memory-vault contract address (testnet). */
   contractAddress?: string;

@@ -27,6 +27,7 @@ owner already texts.
 | Preimage (`sha256(text)`) | Circuit input only | No |
 | Commitment (`persistentCommit(preimage, salt)`, computed in-circuit) | Midnight ledger | Yes |
 | Owner binding (`persistentCommit(ownerSecret, commitment)`) | Midnight ledger | Yes |
+| Category binding (`persistentCommit(category, commitment)`) | Midnight ledger | Yes |
 | Disclosed category code | Midnight ledger | Yes (1–5, or 0 for existence) |
 | Spend amount | Public running total | Yes (the limit is what the circuit enforces) |
 
@@ -35,6 +36,9 @@ owner already texts.
   from the ledger. Without the salt and text the commitment cannot be opened.
 - **Proofs are single-use.** Each attestation id is nullified on use, so one
   proof cannot be replayed as two.
+- **A proof cannot claim the wrong category.** The category is bound to the
+  commitment at commit time as a second hiding commitment, and `attest`
+  re-checks the disclosed code against it in-circuit.
 - **Plaintext never enters the prompt for anyone but the owner.** A non-owner
   can receive a category proof via the vault, never the text.
 
@@ -87,8 +91,8 @@ sequenceDiagram
   A->>A: memory_write-equivalent saves plaintext locally
   A->>M: vault_commit(text, health)
   Note over M,L: the circuit computes persistentCommit; only it can open it
-  M->>P: POST /commit { preimage, salt }
-  P->>L: commit(preimage, salt) -> persistentCommit; store + owner binding
+  M->>P: POST /commit { preimage, salt, category }
+  P->>L: commit(preimage, salt, category) -> commitment + owner and category bindings
   L-->>P: txHash
   P-->>M: { commitment, txHash }
   A-->>O: Saved privately as a health memory. Commitment 0x… tx 0x…
@@ -121,7 +125,7 @@ Midnight.js SDK, and it backs the runtime client against a real chain.
 | Endpoint | Body | Returns |
 |---|---|---|
 | `POST /deploy` | `{ contract: "memory-vault" \| "allowance-registry" }` | `{ address, txHash }` |
-| `POST /commit` | `{ contract, preimage, salt }` | `{ commitment, txHash }` |
+| `POST /commit` | `{ contract, preimage, salt, category }` | `{ commitment, txHash }` |
 | `POST /attest` | `{ contract, commitment, attestationId, category }` | `{ txHash }` |
 | `POST /allowance/authorize` | `{ contract, key, maxAmount }` | `{ txHash }` |
 | `POST /allowance/spend` | `{ contract, key, amount }` | `{ txHash }` |
@@ -130,6 +134,11 @@ Midnight.js SDK, and it backs the runtime client against a real chain.
 A local reference implementation backs these with `midnight-local-dev` for
 development; a testnet implementation uses a funded wallet. Both are described
 in `contracts/README.md`.
+
+`category` is the small code the circuit binds to the commitment at commit time
+(`1`–`5`); `attest` only verifies when the code it is given reproduces that
+binding. The adapter listens on `127.0.0.1:6400` and only accepts same-origin
+JSON `POST`s, because every write submits a real transaction from its wallet.
 
 ## Agent tools
 

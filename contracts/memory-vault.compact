@@ -8,9 +8,13 @@
 // secret, so the ledger does not reveal who owns which memory.
 //
 // Selective disclosure happens in `attest`: the verifier learns a single small
-// category code, never the text. Each attestation id is nullified on use, so a
-// proof cannot be replayed. `revoke` retires a memory so no further proofs can
-// be made about it.
+// category code, never the text. The category is not taken on trust at proof
+// time: `commit` stores a second hiding commitment to the category code, keyed
+// by the memory's commitment, and `attest` only verifies when the disclosed
+// code reproduces that entry. So a proof can never claim a category the memory
+// was not committed with. Each attestation id is nullified on use, so a proof
+// cannot be replayed. `revoke` retires a memory so no further proofs can be
+// made about it.
 //
 // Why `persistentCommit` and not a plain hash: the ledger only ever sees the
 // commitment; `persistentCommit` is the platform primitive the compiler treats
@@ -26,6 +30,7 @@ import CompactStandardLibrary;
 
 // Public, on-chain state. Every field here is readable by anyone.
 export ledger commitments: Map<Bytes<32>, Bytes<32>>; // commitment -> owner binding
+export ledger categories: Map<Bytes<32>, Bytes<32>>;  // commitment -> hiding commitment to its category code
 export ledger nullifiers: Map<Bytes<32>, Boolean>;    // attestationId -> spent
 export ledger attestations: Map<Bytes<32>, Uint<8>>;  // attestationId -> disclosed category
 export ledger active: Map<Bytes<32>, Boolean>;         // commitment -> live (false after revoke)
@@ -35,18 +40,24 @@ export ledger active: Map<Bytes<32>, Boolean>;         // commitment -> live (fa
 witness ownerSecret(): Bytes<32>;
 
 // Anchor a memory. Stores only a hiding commitment plus a binding to the owner,
-// and returns the commitment so the caller can reference it later.
-export circuit commit(preimage: Bytes<32>, salt: Bytes<32>): Bytes<32> {
+// and returns the commitment so the caller can reference it later. `category`
+// stays a private input; the ledger gets only a hiding commitment to it, so the
+// category is disclosed later, on purpose, by `attest`.
+export circuit commit(preimage: Bytes<32>, salt: Bytes<32>, category: Uint<8>): Bytes<32> {
   const c = persistentCommit<Bytes<32>>(preimage, salt);
   assert(!commitments.member(c), "memory already committed");
   commitments.insert(c, persistentCommit<Bytes<32>>(ownerSecret(), c));
+  // The commitment itself salts the category binding, so it is unique per
+  // memory and nothing is revealed about the category at commit time.
+  categories.insert(c, persistentCommit<Uint<8>>(category, c));
   active.insert(c, true);
   return disclose(c);
 }
 
 // Selective disclosure: prove a property of a memory without revealing it.
 // The verifier learns only `category` (a small code); the nullifier makes the
-// proof single-use.
+// proof single-use. A category other than 0 must match the code the memory was
+// committed with, which the circuit checks against `categories`.
 export circuit attest(c: Bytes<32>, attestationId: Bytes<32>, category: Uint<8>): [] {
   const key = disclose(c);
   const aid = disclose(attestationId);
@@ -56,6 +67,12 @@ export circuit attest(c: Bytes<32>, attestationId: Bytes<32>, category: Uint<8>)
     commitments.lookup(key) == persistentCommit<Bytes<32>>(ownerSecret(), c),
     "not the owner of this commitment"
   );
+  if (category != 0) {
+    assert(
+      categories.lookup(key) == persistentCommit<Uint<8>>(category, key),
+      "category does not match this memory"
+    );
+  }
   assert(!nullifiers.member(aid), "attestation already used");
   nullifiers.insert(aid, true);
   attestations.insert(aid, disclose(category));

@@ -19,7 +19,14 @@ import * as Rx from 'rxjs';
 
 import { resolveNetwork, getOrCreateWallet, formatWalletBackupNotice } from './network';
 import { createWallet, persistWalletState, unshieldedToken, type WalletContext } from './wallet';
-import { VAULT_PRIVATE_STATE_ID, vaultPrivateState, vaultWitnesses } from './witnesses';
+import {
+  ALLOWANCE_PRIVATE_STATE_ID,
+  VAULT_PRIVATE_STATE_ID,
+  allowancePrivateState,
+  allowanceWitnesses,
+  vaultPrivateState,
+  vaultWitnesses,
+} from './witnesses';
 
 import { deployContract, findDeployedContract } from '@midnight-ntwrk/midnight-js-contracts';
 import { httpClientProofProvider } from '@midnight-ntwrk/midnight-js-http-client-proof-provider';
@@ -63,6 +70,30 @@ async function waitForProofServer(url: string, maxAttempts = 60, delayMs = 2000)
     }
   }
   return false;
+}
+
+/**
+ * Bound a wallet SDK wait by its configured deadline. The SDK can stay pending
+ * forever (a wallet that never emits a synced DUST state), which would take the
+ * script past the deadline it just printed to the operator.
+ */
+function withDeadline<T>(work: Promise<T>, ms: number, what: string): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(
+      () => reject(new Error(`timed out after ${Math.round(ms / 1000)}s waiting for ${what}`)),
+      ms,
+    );
+    work.then(
+      (value) => {
+        clearTimeout(timer);
+        resolve(value);
+      },
+      (err) => {
+        clearTimeout(timer);
+        reject(err as Error);
+      },
+    );
+  });
 }
 
 function walletProviders(ctx: WalletContext) {
@@ -119,7 +150,11 @@ async function ensureDust(ctx: WalletContext): Promise<void> {
     try {
       const { fee } = await ctx.wallet.estimateRegistration(unregistered);
       console.log(`  Waiting for generated DUST to cover the registration fee (${fee})...`);
-      await ctx.wallet.waitForGeneratedDust(unregistered, fee);
+      await withDeadline(
+        ctx.wallet.waitForGeneratedDust(unregistered, fee),
+        DUST_WAIT_TIMEOUT_MS,
+        'DUST to cover the registration fee',
+      );
     } catch (err) {
       console.log(`  (registration fee estimate unavailable: ${err instanceof Error ? err.message : String(err)}; proceeding)`);
     }
@@ -175,8 +210,16 @@ async function main(): Promise<void> {
     const start = Date.now();
     for (;;) {
       await new Promise((r) => setTimeout(r, 10_000));
-      const s = await Rx.firstValueFrom(ctx.wallet.state().pipe(Rx.filter((x) => x.isSynced)));
-      const tn = s.unshielded.balances[unshieldedToken().raw] ?? 0n;
+      // Bound the read by what is left of the window: a wallet that stops
+      // emitting synced states would otherwise hang the loop past its deadline.
+      const remainingMs = timeoutMs - (Date.now() - start);
+      const next = await Rx.firstValueFrom(
+        ctx.wallet.state().pipe(
+          Rx.filter((x) => x.isSynced),
+          Rx.timeout({ first: Math.max(1_000, remainingMs) }),
+        ),
+      ).catch(() => undefined);
+      const tn = next ? (next.unshielded.balances[unshieldedToken().raw] ?? 0n) : 0n;
       if (tn > 0n) {
         console.log(`\n  Funded: ${tn.toLocaleString()} tNIGHT\n`);
         break;
@@ -228,9 +271,12 @@ async function main(): Promise<void> {
   const memoryText = 'I take medication X daily';
   const preimage = sha256(memoryText);
   const salt = randomBytes(32);
+  // Category code 1 = health; the circuit binds it to the commitment, so the
+  // attest below can only claim it truthfully.
+  const categoryCode = 1n;
   console.log('─── Committing a private memory ───────────────────────────────');
   console.log(`  plaintext (stays local): ${JSON.stringify(memoryText)}`);
-  const commitCall = await vault.callTx.commit(preimage, salt);
+  const commitCall = await vault.callTx.commit(preimage, salt, categoryCode);
   // The circuit return value lives on the private side of the call result
   // (the public side carries the transcript and next contract state).
   const commitment = commitCall.private.result as Uint8Array;
@@ -239,7 +285,7 @@ async function main(): Promise<void> {
 
   const attestationId = randomBytes(32);
   console.log('─── Selective-disclosure proof (category = health) ────────────');
-  const attestCall = await vault.callTx.attest(commitment, attestationId, 1n);
+  const attestCall = await vault.callTx.attest(commitment, attestationId, categoryCode);
   console.log(`  proof tx: ${attestCall.public.txId} (block ${attestCall.public.blockHeight})`);
   const ledgerState = await vaultProviders.publicDataProvider.queryContractState(vaultAddress);
   const board = vaultMod.ledger(ledgerState?.data) as {
@@ -254,7 +300,7 @@ async function main(): Promise<void> {
   let allowanceTx: string | undefined;
   try {
     const allowanceCompiled = CompiledContract.make('allowance-registry', allowanceMod.Contract as never).pipe(
-      CompiledContract.withVacantWitnesses,
+      CompiledContract.withWitnesses(allowanceWitnesses() as never),
       CompiledContract.withCompiledFileAssets(ALLOWANCE_DIR),
     );
     const allowanceProviders = contractProviders(ctx, networkConfig, 'allowance-registry', ALLOWANCE_DIR);
@@ -262,8 +308,8 @@ async function main(): Promise<void> {
     const deployed = await deployContract(allowanceProviders, {
       compiledContract: allowanceCompiled as never,
       args: [],
-      privateStateId: 'allowanceRegistryPrivateState',
-      initialPrivateState: {},
+      privateStateId: ALLOWANCE_PRIVATE_STATE_ID,
+      initialPrivateState: allowancePrivateState(WALLET.seed),
     } as never);
     allowanceAddress = deployed.deployTxData.public.contractAddress;
     allowanceTx = deployed.deployTxData.public.txId;
@@ -298,7 +344,10 @@ async function main(): Promise<void> {
   console.log('─── Done ──────────────────────────────────────────────────────');
   console.log(`  Wrote ${OUT_FILE}`);
   console.log('  Set these in the agent environment:');
-  console.log(`    MIDNIGHT_MODE=${network === 'undeployed' ? 'mock' : 'testnet'}`);
+  console.log(`    MIDNIGHT_MODE=${network === 'undeployed' ? 'local' : 'testnet'}`);
+  if (network === 'undeployed') {
+    console.log(`    MIDNIGHT_PROOF_URL=http://127.0.0.1:6400   # npm run adapter`);
+  }
   console.log(`    MIDNIGHT_CONTRACT_ADDRESS=${vaultAddress}`);
   if (allowanceAddress) console.log(`    MIDNIGHT_ALLOWANCE_ADDRESS=${allowanceAddress}`);
   console.log('');

@@ -11,10 +11,12 @@ This package adds a second, private dimension to every durable memory:
 1. **`vault_commit`** saves the note locally *and* anchors an opaque 32-byte
    commitment on Midnight. The chain never sees the text.
 2. **`vault_prove_reveal`** produces a selective-disclosure proof: the verifier
-   learns only a category code (health, finance, …) or bare existence.
+   learns only a category code (health, finance, …) or bare existence, and the
+   circuit only accepts a code the memory was committed with.
 3. **`vault_status`** reports the mode, contract addresses and counts.
-4. **`allowance_check`** (stretch) gates a spend against an on-chain allowance
-   without revealing the exact amount.
+4. **`allowance_check`** (stretch) gates a spend against an on-chain allowance.
+   Limits and running totals are public (an allowance is a statement, like a
+   card limit); what the circuit guarantees is that no spend passes the limit.
 
 ## Modes
 
@@ -46,6 +48,9 @@ node packages/midnight/scripts/deploy-testnet.mjs   # needs MIDNIGHT_PROOF_URL
 ## Privacy invariants
 
 - Memory plaintext never leaves the host; only commitments and tx hashes do.
-- Proofs disclose a category code or `0` (existence), never the text.
+- Proofs disclose a category code or `0` (existence), never the text, and the
+  disclosed code is bound at commit time: a proof cannot claim another category.
 - Attestation ids are nullified on use, so a proof cannot be replayed.
-- The spend amount is a witness, never a public ledger value.
+- Allowance limits and spend totals are public by design; the exact-amount
+  hiding v0 planned is not achievable while the running total is public, and the
+  circuit is what stops a spend from passing the limit.

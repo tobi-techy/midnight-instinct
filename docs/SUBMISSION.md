@@ -22,8 +22,9 @@ it a shielded memory vault on Midnight. Three verbs:
 3. **Spend** — allowances are enforced by a circuit, so a prompt-injected agent
    cannot exceed a limit.
 
-The plaintext stays in `MEMORY.md`; the chain sees commitments, an owner
-binding, a category code, and nullifiers. The full inventory is in
+The plaintext stays in `MEMORY.md`; the chain sees commitments, owner bindings,
+a hiding commitment to each memory's category (the plain code appears only when
+the owner attests it), and nullifiers. The full inventory is in
 [PRIVACY-MODEL.md](PRIVACY-MODEL.md).
 
 ## Why this needs Midnight (and not just a database)

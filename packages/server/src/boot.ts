@@ -38,7 +38,6 @@ import {
   midnightEnv,
   midnightGuidance,
   midnightTools,
-  newPersistedState,
   type MidnightStatus,
   type PersistedState,
 } from "@open-instinct/midnight";
@@ -74,8 +73,12 @@ export interface BootResult {
   apps?: ComposioApps;
   /** Toolkits Composio reports as connected at boot, for the status page. */
   appsConnected?: string[];
-  /** Midnight privacy layer status when MIDNIGHT_MODE or a contract address is configured. */
-  midnight?: MidnightStatus;
+  /**
+   * Midnight privacy layer status when MIDNIGHT_MODE or a contract address is
+   * configured. A function, not a snapshot: anchor and proof counts move as the
+   * agent works, and GET / and GET /midnight/status must report the current ones.
+   */
+  midnightStatus?: () => MidnightStatus;
   startedAt: number;
   modelSpec: string;
   /** Finished chat replies waiting for the next /chat on their conversation. */
@@ -173,10 +176,11 @@ export async function boot(env: NodeJS.ProcessEnv, opts: BootOptions = {}): Prom
   if (midnightCfg) {
     const stored = state.readJson<Partial<PersistedState>>(MIDNIGHT_STATE_FILE, {});
     const vaultKey = typeof stored.vaultKey === "string" && stored.vaultKey ? stored.vaultKey : randomBytes(16).toString("hex");
-    const persisted = Object.keys(stored).length > 0 ? (stored as PersistedState) : newPersistedState(vaultKey);
     midnightClient = new MidnightClient({
       env: midnightCfg,
-      state: persisted,
+      // The file is also written by the deploy scripts, so it is normalized on
+      // load rather than trusted to be exactly the runtime shape.
+      state: stored as PersistedState,
       save: (s) => state.writeJson(MIDNIGHT_STATE_FILE, s),
       vaultKey,
       ...(opts.fetchImpl ? { fetchImpl: opts.fetchImpl } : {}),
@@ -379,7 +383,7 @@ export async function boot(env: NodeJS.ProcessEnv, opts: BootOptions = {}): Prom
     computerKind: computer?.kind,
     apps,
     appsConnected,
-    ...(midnightClient ? { midnight: midnightClient.status() } : {}),
+    ...(midnightClient ? { midnightStatus: () => midnightClient.status() } : {}),
     startedAt,
     modelSpec,
     chatBuffer,

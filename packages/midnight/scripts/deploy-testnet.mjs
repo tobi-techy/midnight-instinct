@@ -62,15 +62,22 @@ async function main() {
   }
 
   const existing = existsSync(outFile) ? JSON.parse(readFileSync(outFile, "utf8")) : {};
+  // The runtime reads this file as anchor state (commitments, nullifiers,
+  // allowances). Write those maps in full, and keep deployment metadata under its
+  // own key so nothing here can be mistaken for an anchor.
   const merged = {
-    ...existing,
     version: 1,
-    mode: "testnet",
     vaultKey: existing.vaultKey ?? "",
-    contractAddress: vault.address,
-    ...(allowances ? { allowanceAddress: allowances.address } : {}),
-    deployedAt: new Date().toISOString(),
-    deploymentTx: { vault: vault.txHash, ...(allowances ? { allowances: allowances.txHash } : {}) },
+    commitments: existing.commitments ?? {},
+    nullifiers: existing.nullifiers ?? {},
+    allowances: existing.allowances ?? {},
+    deployment: {
+      mode: "testnet",
+      contractAddress: vault.address,
+      ...(allowances ? { allowanceAddress: allowances.address } : {}),
+      deployedAt: new Date().toISOString(),
+      tx: { vault: vault.txHash, ...(allowances ? { allowances: allowances.txHash } : {}) },
+    },
   };
   mkdirSync(dirname(outFile), { recursive: true });
   writeFileSync(outFile, JSON.stringify(merged, null, 2) + "\n");

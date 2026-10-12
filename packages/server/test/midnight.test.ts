@@ -18,7 +18,7 @@ const config: InstinctConfig = {
   features: { typingIndicators: true, tapbacks: true, journal: true },
 };
 
-function app(midnight?: HttpApp["midnight"]): HttpApp {
+function app(midnightStatus?: HttpApp["midnightStatus"]): HttpApp {
   const buffer = new ChatReplyBuffer();
   return {
     state: new StateDir(mkdtempSync(join(tmpdir(), "server-midnight-"))),
@@ -29,7 +29,7 @@ function app(midnight?: HttpApp["midnight"]): HttpApp {
     appsConnected: [],
     startedAt: Date.now(),
     modelSpec: "faux/faux-1",
-    ...(midnight ? { midnight } : {}),
+    ...(midnightStatus ? { midnightStatus } : {}),
   };
 }
 
@@ -55,7 +55,7 @@ describe("GET /midnight/status", () => {
 
   it("returns mode, contract and anchor counts when configured", async () => {
     const base = await serve(
-      app({ mode: "testnet", contractAddress: "0xabc", commitments: 3, attestations: 1, allowances: 0 }),
+      app(() => ({ mode: "testnet", contractAddress: "0xabc", commitments: 3, attestations: 1, allowances: 0 })),
     );
     const res = await fetch(`${base}/midnight/status`);
     expect(res.status).toBe(200);
@@ -66,8 +66,16 @@ describe("GET /midnight/status", () => {
     expect(body.attestations).toBe(1);
   });
 
+  it("reports live counts, not the boot-time snapshot", async () => {
+    let commitments = 0;
+    const base = await serve(app(() => ({ mode: "mock", commitments, attestations: 0, allowances: 0 })));
+    expect((await (await fetch(`${base}/midnight/status`)).json()).commitments).toBe(0);
+    commitments = 4;
+    expect((await (await fetch(`${base}/midnight/status`)).json()).commitments).toBe(4);
+  });
+
   it("surfaces the Midnight block on the status page", async () => {
-    const base = await serve(app({ mode: "mock", commitments: 2, attestations: 0, allowances: 0 }));
+    const base = await serve(app(() => ({ mode: "mock", commitments: 2, attestations: 0, allowances: 0 })));
     const res = await fetch(`${base}/`);
     expect(res.status).toBe(200);
     expect((await res.json()).midnight).toMatchObject({ mode: "mock", commitments: 2 });

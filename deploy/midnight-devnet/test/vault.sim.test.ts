@@ -4,8 +4,8 @@
  * Drives the memory-vault circuits through the Compact runtime directly — no
  * network, no proof server, no wallet. This is the off-chain counterpart to
  * `deploy.ts`: it exercises commit / attest / revoke semantics (bind-once,
- * owner binding, single-use nullifiers, revocation) against the real compiled
- * circuits.
+ * owner binding, category binding, single-use nullifiers, revocation) against
+ * the real compiled circuits.
  *
  *   npm test
  */
@@ -44,36 +44,38 @@ describe('memory vault circuits (simulator)', () => {
   const preimage = b32(10);
   const salt = b32(20);
   const attestationId = b32(30);
+  const health = 1n;
 
   it('commits a memory and stores a 32-byte active commitment', () => {
     const { contract, context } = setup(b32(1));
-    const { result, context: next } = contract.circuits.commit(context, preimage, salt);
+    const { result, context: next } = contract.circuits.commit(context, preimage, salt, health);
     expect(result).toBeInstanceOf(Uint8Array);
     expect(result).toHaveLength(32);
     const l = readLedger(next);
     expect(l.commitments.size()).toBe(1n);
     expect(l.commitments.member(result)).toBe(true);
+    expect(l.categories.member(result)).toBe(true);
     expect(l.active.lookup(result)).toBe(true);
   });
 
   it('is bind-once: the same preimage and salt cannot be committed twice', () => {
     const { contract, context } = setup(b32(1));
-    const first = contract.circuits.commit(context, preimage, salt);
-    expect(() => contract.circuits.commit(first.context, preimage, salt)).toThrow(/already committed/);
+    const first = contract.circuits.commit(context, preimage, salt, health);
+    expect(() => contract.circuits.commit(first.context, preimage, salt, health)).toThrow(/already committed/);
   });
 
   it('differs for different preimages and different salts', () => {
     const { contract, context } = setup(b32(1));
-    const a = contract.circuits.commit(context, preimage, salt);
-    const b = contract.circuits.commit(a.context, b32(11), salt);
-    const c = contract.circuits.commit(b.context, preimage, b32(21));
+    const a = contract.circuits.commit(context, preimage, salt, health);
+    const b = contract.circuits.commit(a.context, b32(11), salt, health);
+    const c = contract.circuits.commit(b.context, preimage, b32(21), health);
     expect(a.result).not.toEqual(b.result);
     expect(a.result).not.toEqual(c.result);
   });
 
   it('attests a category and nullifies the attestation id', () => {
     const { contract, context } = setup(b32(1));
-    const committed = contract.circuits.commit(context, preimage, salt);
+    const committed = contract.circuits.commit(context, preimage, salt, health);
     const attested = contract.circuits.attest(
       committed.context,
       committed.result,
@@ -85,9 +87,25 @@ describe('memory vault circuits (simulator)', () => {
     expect(l.nullifiers.lookup(attestationId)).toBe(true);
   });
 
+  it('refuses a category the memory was not committed with', () => {
+    const { contract, context } = setup(b32(1));
+    const committed = contract.circuits.commit(context, preimage, salt, health);
+    expect(() =>
+      contract.circuits.attest(committed.context, committed.result, attestationId, 2n),
+    ).toThrow(/category does not match/);
+  });
+
+  it('still proves bare existence (category 0) for any memory', () => {
+    const { contract, context } = setup(b32(1));
+    const committed = contract.circuits.commit(context, preimage, salt, health);
+    const attested = contract.circuits.attest(committed.context, committed.result, attestationId, 0n);
+    const l = readLedger(attested.context);
+    expect(l.attestations.lookup(attestationId)).toBe(0n);
+  });
+
   it('refuses to replay the same attestation id', () => {
     const { contract, context } = setup(b32(1));
-    const committed = contract.circuits.commit(context, preimage, salt);
+    const committed = contract.circuits.commit(context, preimage, salt, health);
     const attested = contract.circuits.attest(committed.context, committed.result, attestationId, 1n);
     expect(() =>
       contract.circuits.attest(attested.context, committed.result, attestationId, 1n),
@@ -96,7 +114,7 @@ describe('memory vault circuits (simulator)', () => {
 
   it('refuses an attestation from a different owner secret', () => {
     const { contract, context } = setup(b32(1));
-    const committed = contract.circuits.commit(context, preimage, salt);
+    const committed = contract.circuits.commit(context, preimage, salt, health);
     const foreign = createCircuitContext(
       dummyContractAddress(),
       committed.context.currentZswapLocalState.coinPublicKey,
@@ -110,7 +128,7 @@ describe('memory vault circuits (simulator)', () => {
 
   it('revokes a commitment so it can no longer be attested', () => {
     const { contract, context } = setup(b32(1));
-    const committed = contract.circuits.commit(context, preimage, salt);
+    const committed = contract.circuits.commit(context, preimage, salt, health);
     const revoked = contract.circuits.revoke(committed.context, committed.result);
     const l = readLedger(revoked.context);
     expect(l.active.lookup(committed.result)).toBe(false);

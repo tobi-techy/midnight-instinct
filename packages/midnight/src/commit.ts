@@ -11,7 +11,7 @@
  * CI are deterministic without a proof server. Mock hashes are only ever used
  * off-chain and are labelled as mock.
  */
-import { createHash } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
 
 export const CATEGORIES = ["health", "finance", "contact", "preference", "other"] as const;
 export type CategoryLabel = (typeof CATEGORIES)[number];
@@ -55,9 +55,13 @@ export function mockCommitmentOf(preimage: string, salt: string): string {
   return sha256hex(`pc|${preimage}|${salt}`);
 }
 
-/** Fresh single-use attestation id (the circuit nullifies it on use). */
+/**
+ * Fresh single-use attestation id (the circuit nullifies it on use). The id has
+ * to be unpredictable: anyone who guesses one can submit it first and burn the
+ * nullifier, so it comes from a CSPRNG rather than a clock and Math.random.
+ */
 export function newAttestationId(): string {
-  return sha256hex(`attest|${Date.now()}|${Math.random().toString(36).slice(2)}`);
+  return randomBytes(32).toString("hex");
 }
 
 /** Ledger key for one (owner, spender, capability) allowance. */

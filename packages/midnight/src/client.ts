@@ -85,6 +85,28 @@ function emptyState(vaultKey: string): PersistedState {
   return { version: 1, vaultKey, commitments: {}, nullifiers: {}, allowances: {} };
 }
 
+function isRecord(v: unknown): v is Record<string, never> {
+  return typeof v === "object" && v !== null && !Array.isArray(v);
+}
+
+/**
+ * Coerce whatever is on disk into a complete PersistedState. The file is also
+ * written by the deploy scripts (deployment metadata, no anchor maps) and can be
+ * hand-edited, so every map is filled in rather than assumed: `status()` and each
+ * count would otherwise throw on a file that is not exactly ours.
+ */
+export function normalizeState(raw: unknown, vaultKey: string): PersistedState {
+  if (!isRecord(raw)) return emptyState(vaultKey);
+  const s = raw as Partial<PersistedState>;
+  return {
+    version: 1,
+    vaultKey: typeof s.vaultKey === "string" && s.vaultKey ? s.vaultKey : vaultKey,
+    commitments: isRecord(s.commitments) ? (s.commitments as PersistedState["commitments"]) : {},
+    nullifiers: isRecord(s.nullifiers) ? (s.nullifiers as PersistedState["nullifiers"]) : {},
+    allowances: isRecord(s.allowances) ? (s.allowances as PersistedState["allowances"]) : {},
+  };
+}
+
 export interface MidnightClientOptions {
   env: MidnightEnv;
   state: PersistedState | undefined;
@@ -121,19 +143,18 @@ async function postJson(fetchImpl: typeof fetch, url: string, body: unknown, tim
   }
 }
 
-function txOf(parsed: unknown, fallback: string): string {
-  if (parsed && typeof parsed === "object" && "txHash" in parsed && typeof (parsed as { txHash: unknown }).txHash === "string") {
-    return (parsed as { txHash: string }).txHash;
+/**
+ * A field the proof server must return in local/testnet mode. Guessing here
+ * would anchor a hash the chain never saw: a mock commitment saved as real makes
+ * the later `attest` fail with "unknown commitment" on a transaction that looks
+ * successful to the owner.
+ */
+function requiredField(parsed: unknown, field: string, what: string): string {
+  const v = parsed && typeof parsed === "object" ? (parsed as Record<string, unknown>)[field] : undefined;
+  if (typeof v !== "string" || !v) {
+    throw new Error(`proof-server returned no ${field} for ${what}: refusing to record an anchor that never landed`);
   }
-  return fallback;
-}
-
-/** The real commitment is computed in-circuit; the proof server returns it. */
-function commitmentOfParsed(parsed: unknown, fallback: string): string {
-  if (parsed && typeof parsed === "object" && "commitment" in parsed && typeof (parsed as { commitment: unknown }).commitment === "string") {
-    return (parsed as { commitment: string }).commitment;
-  }
-  return fallback;
+  return v;
 }
 
 export class MidnightClient {
@@ -147,8 +168,7 @@ export class MidnightClient {
   constructor(opts: MidnightClientOptions) {
     this.env = opts.env;
     this.mode = opts.env.mode;
-    this.state = opts.state ?? emptyState(opts.vaultKey);
-    if (!this.state.vaultKey) this.state.vaultKey = opts.vaultKey;
+    this.state = normalizeState(opts.state, opts.vaultKey);
     this.save = opts.save;
     this.fetchImpl = opts.fetchImpl ?? fetch;
     this.now = opts.now ?? (() => new Date());
@@ -198,9 +218,12 @@ export class MidnightClient {
         contract: this.env.contractAddress,
         preimage,
         salt,
+        // The circuit binds this code to the commitment; the ledger stores only a
+        // hiding commitment to it, so the proof can disclose it truthfully later.
+        category: code,
       });
-      commitment = commitmentOfParsed(parsed, mockCommitment);
-      txHash = txOf(parsed, `pending_${commitment.slice(0, 12)}`);
+      commitment = requiredField(parsed, "commitment", "commit");
+      txHash = requiredField(parsed, "txHash", "commit");
     }
     this.state.commitments[commitment] = { category, code, salt, txHash, at: this.now().toISOString() };
     this.save(this.state);
@@ -230,6 +253,12 @@ export class MidnightClient {
       disclosed = CATEGORY_CODES[category];
       disclosedLabel = category;
     }
+    // The circuit refuses a category the memory was not committed with; fail
+    // here too so mock mode cannot claim what local/testnet would reject.
+    const row = this.state.commitments[commitment]!;
+    if (disclosed !== 0 && disclosed !== row.code) {
+      throw new Error(`cannot disclose ${disclosedLabel}: this memory was committed as ${row.category}`);
+    }
     const attestationId = newAttestationId();
     if (this.state.nullifiers[attestationId]) throw new Error("attestation collision: retry");
     let txHash: string;
@@ -243,7 +272,7 @@ export class MidnightClient {
         attestationId,
         category: disclosed,
       });
-      txHash = txOf(parsed, `pending_${attestationId.slice(0, 12)}`);
+      txHash = requiredField(parsed, "txHash", "attest");
     }
     this.state.nullifiers[attestationId] = { commitment, disclosed, txHash, at: this.now().toISOString() };
     this.save(this.state);
@@ -267,7 +296,7 @@ export class MidnightClient {
         key,
         maxAmount: maxCents,
       });
-      txHash = txOf(parsed, `pending_${key.slice(0, 12)}`);
+      txHash = requiredField(parsed, "txHash", "allowance call");
     }
     const prev = this.state.allowances[key];
     this.state.allowances[key] = { maxCents, spentCents: prev?.spentCents ?? 0, active: true };
@@ -302,7 +331,7 @@ export class MidnightClient {
         key,
         amount: amountCents,
       });
-      txHash = txOf(parsed, `pending_${key.slice(0, 12)}`);
+      txHash = requiredField(parsed, "txHash", "allowance call");
     }
     row.spentCents += amountCents;
     this.save(this.state);
@@ -322,7 +351,7 @@ export class MidnightClient {
         contract: this.env.allowanceAddress ?? this.env.contractAddress,
         key,
       });
-      txHash = txOf(parsed, `pending_${key.slice(0, 12)}`);
+      txHash = requiredField(parsed, "txHash", "allowance call");
     }
     row.active = false;
     this.save(this.state);
