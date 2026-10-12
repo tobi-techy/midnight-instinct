@@ -35,7 +35,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const VAULT_DIR = path.resolve(__dirname, '..', 'contracts', 'managed', 'memory-vault');
 const ALLOWANCE_DIR = path.resolve(__dirname, '..', 'contracts', 'managed', 'allowance-registry');
 const OUT_FILE = path.resolve(__dirname, '..', 'deployment.json');
-const DUST_WAIT_TIMEOUT_MS = 5 * 60 * 1000;
+const DUST_WAIT_TIMEOUT_MS = Number(process.env.MIDNIGHT_DUST_TIMEOUT_MS) || 15 * 60 * 1000;
 
 const hex = (u8: Uint8Array): string => Buffer.from(u8).toString('hex');
 const sha256 = (s: string): Uint8Array => createHash('sha256').update(s, 'utf8').digest();
@@ -113,6 +113,16 @@ async function ensureDust(ctx: WalletContext): Promise<void> {
   );
   if (unregistered.length > 0) {
     console.log(`  Registering ${unregistered.length} NIGHT UTXO(s) for DUST generation...`);
+    // A registration built too soon after funding has no DUST yet to pay its own
+    // fee and throws before signing. Wait until the NIGHT already generates
+    // enough to cover the estimated fee (see the funding guide).
+    try {
+      const { fee } = await ctx.wallet.estimateRegistration(unregistered);
+      console.log(`  Waiting for generated DUST to cover the registration fee (${fee})...`);
+      await ctx.wallet.waitForGeneratedDust(unregistered, fee);
+    } catch (err) {
+      console.log(`  (registration fee estimate unavailable: ${err instanceof Error ? err.message : String(err)}; proceeding)`);
+    }
     const recipe = await ctx.wallet.registerNightUtxosForDustGeneration(
       unregistered,
       ctx.unshieldedKeystore.getPublicKey(),
@@ -152,6 +162,30 @@ async function main(): Promise<void> {
   console.log(`  Wallet ${address}\n  Balance ${balance.toLocaleString()} tNIGHT\n`);
   if (network === 'undeployed' && balance === 0n) {
     throw new Error('Genesis wallet has zero NIGHT; the devnet preset may not have minted. Try: docker compose down -v && npm run setup');
+  }
+
+  // Public networks: wait for the faucet. tNIGHT appears as soon as the faucet
+  // transaction lands, unlike DUST which must accrue after registration.
+  if (network !== 'undeployed' && balance === 0n && networkConfig.faucet) {
+    console.log('─── Fund the wallet ───────────────────────────────────────────');
+    console.log(`  address: ${address}`);
+    console.log(`  faucet:  ${networkConfig.faucet}`);
+    const timeoutMs = Number(process.env.MIDNIGHT_FAUCET_TIMEOUT_MS) || 30 * 60 * 1000;
+    console.log(`  Waiting for tNIGHT (poll every 10s, up to ${Math.round(timeoutMs / 60_000)} min)...\n`);
+    const start = Date.now();
+    for (;;) {
+      await new Promise((r) => setTimeout(r, 10_000));
+      const s = await Rx.firstValueFrom(ctx.wallet.state().pipe(Rx.filter((x) => x.isSynced)));
+      const tn = s.unshielded.balances[unshieldedToken().raw] ?? 0n;
+      if (tn > 0n) {
+        console.log(`\n  Funded: ${tn.toLocaleString()} tNIGHT\n`);
+        break;
+      }
+      if (Date.now() - start > timeoutMs) {
+        throw new Error(`funding not received within the window. Re-run after funding — the seed is preserved.\n  address: ${address}\n  faucet:  ${networkConfig.faucet}`);
+      }
+      process.stdout.write(`\r  ...still waiting (${Math.round((Date.now() - start) / 1000)}s)`);
+    }
   }
 
   await ensureDust(ctx);

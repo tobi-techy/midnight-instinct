@@ -187,8 +187,11 @@ A verified run produced (see `deployment.json`):
 | On-chain state | 1 commitment, 1 attestation, 1 nullifier |
 | Deploy `allowance-registry` | address `2d116032…2244c156` |
 
-To move to Preprod, set `BLOCKFROST_PROJECT_ID` and `MIDNIGHT_WALLET_MNEMONIC`
-and run `npm run setup -- --network preprod`; see
+To move to Preprod (now Blockfrost-only, since the Midnight-hosted endpoints
+retired on 2026-10-09), set `BLOCKFROST_PROJECT_ID`, run `npm run address` to
+get a wallet to fund from the faucet, then run
+`npm run setup -- --network preprod`. Optionally set
+`MIDNIGHT_WALLET_MNEMONIC` to reuse a wallet you already funded; see
 `deploy/midnight-devnet/README.md`.
 
 ### The agent drives the live chain

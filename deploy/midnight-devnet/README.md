@@ -53,6 +53,39 @@ npm run test:e2e      # reconnects and reads the on-chain ledger
 npm run check-balance # wallet + DUST balance
 ```
 
+## Deploy to Preprod (public testnet)
+
+Preprod is reached through [Blockfrost](https://blockfrost.io) — the
+Midnight-hosted Preprod endpoints were retired on 2026-10-09. You need a
+Blockfrost **Preprod** project id.
+
+```bash
+cd deploy/midnight-devnet
+# 1. Put secrets in a gitignored file (.env.* is ignored):
+#    BLOCKFROST_PROJECT_ID=preprod...
+#    MIDNIGHT_WALLET_MNEMONIC="word word … word"   # optional; omit to generate one
+set -a; source .env.preprod; set +a
+
+npm run address        # prints the wallet address (and persists a generated seed)
+# 2. Fund that address from the Preprod faucet, then:
+npm run setup -- --network preprod   # proof server + compile + deploy
+```
+
+Notes:
+
+- Only the proof server runs locally; the node and indexer are Blockfrost.
+  The Midnight-hosted Preprod endpoints shut down from 22:00 UTC on 2026-10-09.
+- A fresh wallet syncs from genesis (Preprod is ~2.9M blocks), which takes
+  **over an hour**; later runs reuse `midnight-level-db/` and
+  `.midnight-wallet-state/`. The SDK may log
+  `subscribeRuntimeVersion(): disconnected` — Blockfrost's RPC declines that
+  node websocket subscription, and it is harmless; the wallet syncs from the
+  indexer.
+- `deploy` waits for the faucet (default 30 min, override with
+  `MIDNIGHT_FAUCET_TIMEOUT_MS`) and for DUST (default 15 min,
+  `MIDNIGHT_DUST_TIMEOUT_MS`). Both are gitignored, so an interrupted run resumes.
+- Set `MIDNIGHT_WALLET_MNEMONIC` to reuse a wallet you already funded.
+
 ## Drive the chain from the agent
 
 `npm run adapter` starts the REST service the agent's `local`/`testnet`

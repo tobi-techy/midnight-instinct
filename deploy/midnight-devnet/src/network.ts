@@ -69,10 +69,13 @@ export const NETWORK_CONFIGS: Record<NetworkId, NetworkConfig> = {
   },
   preprod: {
     networkId: 'preprod',
-    // The Midnight-hosted Preprod endpoints were retired on 2026-10-09; Preprod
-    // is served by Blockfrost. Every URL needs a `?project_id=<token>` from a
-    // Midnight Preprod project. Set BLOCKFROST_PROJECT_ID and it is appended
-    // below; override the URLs directly with MIDNIGHT_INDEXER_URL etc. if needed.
+    // Preprod is served by Blockfrost; the Midnight-hosted endpoints
+    // (indexer/rpc.preprod.midnight.network) shut down from 22:00 UTC on
+    // 2026-10-09. Every URL needs `?project_id=<token>`; set
+    // BLOCKFROST_PROJECT_ID and it is appended below. The node RPC may decline
+    // the SDK's runtime-version websocket subscription — that is benign, the
+    // wallet syncs from the indexer. Expect a full first sync (Preprod is
+    // ~2.9M blocks) to take over an hour; it is resumable via the caches.
     indexer:   'https://midnight-preprod.blockfrost.io/api/v0',
     indexerWS: 'wss://midnight-preprod.blockfrost.io/api/v0/ws',
     node:      'https://rpc.midnight-preprod.blockfrost.io',
