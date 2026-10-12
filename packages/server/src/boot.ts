@@ -4,6 +4,7 @@
  * configured. Everything it builds is returned so main.ts, the smoke test and
  * embedders can drive it the same way.
  */
+import { randomBytes } from "node:crypto";
 import { streamSimple } from "@earendil-works/pi-ai/compat";
 import type { Model } from "@earendil-works/pi-ai";
 import type { StreamFn } from "@earendil-works/pi-agent-core";
@@ -30,6 +31,16 @@ import { InkboxA2A, InkboxChannel, InkboxInboundHydrator, InkboxProvisioner, mes
 import { computerGuidance, detectComputer } from "@open-instinct/computer";
 import type { ComputerBackend } from "@open-instinct/computer";
 import { ComposioApps, DEFAULT_TOOLKITS, appsGuidance, appsTools } from "@open-instinct/apps";
+import {
+  MIDNIGHT_STATE_FILE,
+  MidnightClient,
+  ShieldedMemory,
+  midnightEnv,
+  midnightGuidance,
+  midnightTools,
+  type MidnightStatus,
+  type PersistedState,
+} from "@open-instinct/midnight";
 import { networkTools } from "@open-instinct/network";
 import { ChatAwareOutbox, ConsoleOutbox, type ChatReplyBuffer } from "./console-outbox.js";
 import { fileTools } from "./file-tools.js";
@@ -62,6 +73,12 @@ export interface BootResult {
   apps?: ComposioApps;
   /** Toolkits Composio reports as connected at boot, for the status page. */
   appsConnected?: string[];
+  /**
+   * Midnight privacy layer status when MIDNIGHT_MODE or a contract address is
+   * configured. A function, not a snapshot: anchor and proof counts move as the
+   * agent works, and GET / and GET /midnight/status must report the current ones.
+   */
+  midnightStatus?: () => MidnightStatus;
   startedAt: number;
   modelSpec: string;
   /** Finished chat replies waiting for the next /chat on their conversation. */
@@ -151,6 +168,41 @@ export async function boot(env: NodeJS.ProcessEnv, opts: BootOptions = {}): Prom
       ...(env.BRAVE_SEARCH_API_KEY ? { searchApiKey: env.BRAVE_SEARCH_API_KEY } : {}),
     }),
   );
+
+  // Midnight: shielded memory vault + selective-disclosure proofs, when configured.
+  // Off unless MIDNIGHT_MODE (or a contract address) is set, so the agent always boots.
+  const midnightCfg = midnightEnv(env);
+  let midnightClient: MidnightClient | undefined;
+  if (midnightCfg) {
+    const stored = state.readJson<Partial<PersistedState>>(MIDNIGHT_STATE_FILE, {});
+    const vaultKey = typeof stored.vaultKey === "string" && stored.vaultKey ? stored.vaultKey : randomBytes(16).toString("hex");
+    midnightClient = new MidnightClient({
+      env: midnightCfg,
+      // The file is also written by the deploy scripts, so it is normalized on
+      // load rather than trusted to be exactly the runtime shape.
+      state: stored as PersistedState,
+      save: (s) => state.writeJson(MIDNIGHT_STATE_FILE, s),
+      vaultKey,
+      ...(opts.fetchImpl ? { fetchImpl: opts.fetchImpl } : {}),
+    });
+    const shielded = new ShieldedMemory({ inner: memory, client: midnightClient, audit, conversationKey: "system", principalId: "owner" });
+    registry.registerMany(
+      midnightTools({
+        client: midnightClient,
+        shielded,
+        auditAppend: (entry) => audit.append(entry),
+      }),
+    );
+    const midnightStatus = midnightClient.status();
+    promptSections.push(
+      midnightGuidance({
+        mode: midnightStatus.mode,
+        ...(midnightCfg.contractAddress ? { contractAddress: midnightCfg.contractAddress } : {}),
+        commitments: midnightStatus.commitments,
+      }),
+    );
+    log(`midnight: mode ${midnightStatus.mode}${midnightCfg.contractAddress ? `, vault ${midnightCfg.contractAddress}` : " (mock anchors)"}`);
+  }
 
   // Messaging needs Inkbox. send_file does not: without a wire it still hands files
   // to the dashboard chat, which is how `instinct chat` and the smoke test get them.
@@ -331,6 +383,7 @@ export async function boot(env: NodeJS.ProcessEnv, opts: BootOptions = {}): Prom
     computerKind: computer?.kind,
     apps,
     appsConnected,
+    ...(midnightClient ? { midnightStatus: () => midnightClient.status() } : {}),
     startedAt,
     modelSpec,
     chatBuffer,

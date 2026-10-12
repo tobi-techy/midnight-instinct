@@ -16,6 +16,8 @@
     "lint": "pnpm -r --filter './packages/*' run lint",
     "dev": "pnpm --filter @open-instinct/cli run dev",
     "smoke": "pnpm --filter @open-instinct/server run smoke",
+    "contracts:build": "compact compile contracts/memory-vault.compact contracts/build/memory-vault && compact compile contracts/allowance-registry.compact contracts/build/allowance-registry",
+    "contracts:check": "compact compile --skip-zk contracts/memory-vault.compact contracts/build/memory-vault && compact compile --skip-zk contracts/allowance-registry.compact contracts/build/allowance-registry",
     "clean": "pnpm -r --filter './packages/*' exec rm -rf dist",
     "instinct": "node packages/cli/dist/bin.js",
     "check": "pnpm run build && pnpm run test && pnpm run smoke"

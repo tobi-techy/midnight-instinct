@@ -112,6 +112,24 @@ export const HELP_GROUPS: HelpGroup[] = [
     ],
   },
   {
+    title: "Privacy (Midnight)",
+    entries: [
+      {
+        name: "midnight",
+        usage: "midnight init | status | list | prove <commitment> [--disclose health|finance|contact|preference|other|existence] | deploy",
+        summary: "Work with the Midnight privacy layer: shielded memory commitments, selective-disclosure proofs and ZK-gated allowances.",
+        example: "instinct midnight status",
+        flags: [
+          "init: seed the Midnight state file (vault key) for this data dir",
+          "status: mode (mock, local, testnet), contract addresses and anchor counts",
+          "list: every commitment the agent has anchored, with category and tx",
+          "prove: produce a selective-disclosure proof for a commitment, revealing only the category",
+          "deploy: deploy the vault (and allowances) through MIDNIGHT_PROOF_URL",
+        ],
+      },
+    ],
+  },
+  {
     title: "Customize",
     entries: [
       {
