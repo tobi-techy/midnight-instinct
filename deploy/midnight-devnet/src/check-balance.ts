@@ -7,6 +7,7 @@ import { WebSocket } from 'ws';
 import { resolveNetwork, getOrCreateWallet, formatWalletBackupNotice } from './network';
 // unshieldedToken is re-exported from ./wallet (originally @midnight-ntwrk/midnight-js-protocol/ledger).
 import { createWallet, persistWalletState, unshieldedToken } from './wallet';
+import { syncWithDiagnostics } from './diagnostics';
 
 // Enable WebSocket for GraphQL subscriptions
 // @ts-expect-error Required for wallet sync
@@ -45,8 +46,9 @@ async function main() {
       const elapsed = Math.round((Date.now() - syncStart) / 1000);
       process.stdout.write(`\r  ⏳ Still syncing... (${elapsed}s elapsed)   `);
     }, 5000);
-    const state = await walletCtx.wallet.waitForSyncedState();
-    clearInterval(syncInterval);
+    const state = await syncWithDiagnostics('  Wallet sync failed', () =>
+      walletCtx.wallet.waitForSyncedState(),
+    ).finally(() => clearInterval(syncInterval));
     process.stdout.write('\r  ✓ Synced with network.                                      \n');
 
     const address = walletCtx.unshieldedKeystore.getBech32Address();
