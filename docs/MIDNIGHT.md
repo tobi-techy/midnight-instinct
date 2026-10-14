@@ -130,6 +130,13 @@ Midnight.js SDK, and it backs the runtime client against a real chain.
 | `POST /allowance/authorize` | `{ contract, key, maxAmount }` | `{ txHash }` |
 | `POST /allowance/spend` | `{ contract, key, amount }` | `{ txHash }` |
 | `POST /allowance/revoke` | `{ contract, key }` | `{ txHash }` |
+| `POST /verify` | `{ attestationId }` | `{ valid, disclosed, singleUse }` |
+| `GET /verify/<attestationId>` | — | `{ valid, disclosed, singleUse }` |
+
+`POST /commit`, `POST /attest` and the allowance calls are the only writes;
+everything else, `/verify` included, is a read. The adapter funds its own DUST
+on startup (`src/dust.ts`) so a freshly synced wallet can pay for the
+transactions it submits instead of hanging on a fee it cannot cover.
 
 A local reference implementation backs these with `midnight-local-dev` for
 development; a testnet implementation uses a funded wallet. Both are described
@@ -223,6 +230,38 @@ indexer confirming the commitment and nullifier.
 
 ## Verifying a proof
 
+Anyone can check a proof without the agent, the wallet or the seed phrase. The
+ledger is the source of truth: an attestation is recorded when the proof lands,
+and a nullifier is recorded when it is spent, so verifying is a read.
+
+```sh
+# A third party points at the adapter and asks about one attestation:
+instinct midnight verify <attestationId>
+#   Verified — valid health proof (single-use, cannot be replayed)
+#     disclosed: health (code 1)
+#     single-use: yes (cannot be replayed)
+#     public URL: http://127.0.0.1:6400/verify/<attestationId>
+
+# Ask a stricter question — does it prove *this* category?
+instinct midnight verify <attestationId> --expect health    # exit 0
+instinct midnight verify <attestationId> --expect finance   # exit 1, mismatch
+```
+
+What this buys you:
+
+- **No trust in the agent.** `verify()` reads the chain, not the agent's word.
+- **Selective disclosure is what the ledger says.** Only the disclosed category
+  comes back; the plaintext never leaves the owner's machine.
+- **Single use.** A spent attestation has a nullifier, and `singleUse` reports it.
+- **Challenge binding.** A verifier can hand the prover a
+  `prove --challenge <64hex>`, so the proof answers that challenge and cannot be
+  replayed for another one.
+
+The same check is a plain HTTP call (`GET /verify/<id>`), so a relying party can
+integrate it without our code.
+
+To inspect a proof by hand:
+
 1. `instinct midnight list` shows each commitment with its category and tx hash.
 2. Open the tx in the explorer (`MIDNIGHT_EXPLORER_URL`).
 3. Confirm the ledger holds a 32-byte commitment and a category code — and no
@@ -236,5 +275,7 @@ indexer confirming the commitment and nullifier.
 2. *"what do you remember?"* (as the owner) → full recall from `MEMORY.md`.
 3. *"prove to my partner I have a health note, but don't reveal it."*
    → selective-disclosure proof + tx. Verifier learns `health`, nothing else.
-4. `instinct midnight list` → the commitment row, no plaintext.
-5. Open the tx in the explorer → a hash and a category code, no words.
+4. The partner runs `instinct midnight verify <attestationId> --expect health`
+   → `Verified`, exit 0. Switch to `--expect finance` → `Mismatch`, exit 1.
+5. `instinct midnight list` → the commitment row, no plaintext.
+6. Open the tx in the explorer → a hash and a category code, no words.

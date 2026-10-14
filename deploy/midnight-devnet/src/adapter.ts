@@ -24,6 +24,8 @@
  *   POST /allowance/spend     { key, amount }                           -> { txHash }
  *   POST /allowance/revoke    { key }                                   -> { txHash }
  *   POST /deploy              { contract }                              -> { address, txHash }
+ *   POST /verify              { attestationId }                         -> { valid, disclosed, singleUse }
+ *   GET  /verify/<attestationId>                                        -> { valid, disclosed, singleUse }
  *   GET  /health
  */
 import * as fs from 'node:fs';
@@ -34,6 +36,7 @@ import { WebSocket } from 'ws';
 
 import { resolveNetwork, getOrCreateWallet } from './network';
 import { createWallet } from './wallet';
+import { ensureDust } from './dust';
 import {
   ALLOWANCE_PRIVATE_STATE_ID,
   VAULT_PRIVATE_STATE_ID,
@@ -140,6 +143,10 @@ async function main(): Promise<void> {
   console.log('Adapter: syncing (first run can take minutes)...');
   await ctx.wallet.waitForSyncedState();
   console.log('Adapter: wallet synced.');
+  // Fund DUST before touching the chain: an unregistered wallet reads state
+  // fine but every circuit call hangs waiting for a fee it cannot pay.
+  await ensureDust(ctx, { log: (m) => console.log(`Adapter: ${m.trim()}`) });
+  console.log('Adapter: DUST ready.');
 
   const privateState = vaultPrivateState(WALLET.seed);
   const vaultMod = await loadModule(VAULT_DIR);
@@ -200,12 +207,40 @@ async function main(): Promise<void> {
       };
     };
 
+    // Third-party verification: read the public ledger and report whether an
+    // attestation is recorded, which category it disclosed, and that it is
+    // single-use. No wallet, seed or private state is involved.
+    const verifyAttestation = async (rawId: unknown) => {
+      const idHex = String(rawId ?? '').replace(/^0x/, '').trim().toLowerCase();
+      if (!/^[0-9a-f]{64}$/.test(idHex)) {
+        return { attestationId: idHex, valid: false, disclosed: 0, singleUse: false, network, contractAddress: vaultAddress, reason: 'attestationId must be 64 hex chars' };
+      }
+      const st = await vaultProviders.publicDataProvider.queryContractState(vaultAddress);
+      const l = vaultMod.ledger((st as { data: unknown }).data) as {
+        attestations: Iterable<[Uint8Array, bigint]>;
+        nullifiers: Iterable<[Uint8Array, boolean]>;
+      };
+      let valid = false;
+      let disclosed = 0;
+      for (const [k, v] of l.attestations) {
+        if (bytesToHex(k) === idHex) { valid = true; disclosed = Number(v); break; }
+      }
+      let singleUse = false;
+      for (const [k] of l.nullifiers) {
+        if (bytesToHex(k) === idHex) { singleUse = true; break; }
+      }
+      return { attestationId: idHex, valid, disclosed, singleUse, network, contractAddress: vaultAddress };
+    };
+
     try {
       if (req.method === 'GET' && url === '/health') {
         return send(res, 200, { status: 'ok', mode: network, vault: vaultAddress });
       }
       if (req.method === 'GET' && url === '/state') {
         return send(res, 200, await readState());
+      }
+      if (req.method === 'GET' && url.startsWith('/verify/')) {
+        return send(res, 200, await verifyAttestation(url.slice('/verify/'.length)));
       }
       if (req.method === 'GET' && (url === '/' || url === '/index.html')) {
         if (fs.existsSync(INDEX_HTML)) {
@@ -268,6 +303,9 @@ async function main(): Promise<void> {
           const call = await (allowance as never as { callTx: Record<string, (...a: unknown[]) => Promise<{ public: { txId: string } }>> }).callTx
             .revoke(hexToBytes(String(body.key)));
           return send(res, 200, { txHash: call.public.txId });
+        }
+        case '/verify': {
+          return send(res, 200, await verifyAttestation(body.attestationId));
         }
         case '/deploy': {
           // Contracts are deployed by `npm run setup`; report the recorded ones.

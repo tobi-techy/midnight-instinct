@@ -53,6 +53,7 @@ boundary:
 |---|---|---|
 | A verifier | Learn the memory text or any other category | Only the disclosed category and a nullifier are written |
 | A verifier replaying a proof | Reuse one attestation as two | The attestation id is nullified on first use |
+| A verifier that picks the challenge | Accept a proof made for some other question | The proof is bound to the verifier's 64-hex `attestationId`, and `verify --expect` reports a mismatch rather than passing |
 | Another user of the same contract | Commit or attest against the owner's memories | Owner binding is a commitment to a witness-held secret |
 | Another user of the same contract | Spend, revoke or re-authorize (resetting `spent`) the owner's allowance | Every allowance circuit re-checks the owner binding against a witness-held secret |
 | A verifier | Learn a category the memory was not committed with | The category binding is checked inside `attest`, so a substituted code fails the proof |
@@ -66,4 +67,7 @@ boundary:
 - Contract: `contracts/memory-vault.compact`, `contracts/allowance-registry.compact`
 - Witnesses: `deploy/midnight-devnet/src/witnesses.ts` (the vault's owner secret and the allowance registry's)
 - Off-chain semantics: `deploy/midnight-devnet/test/vault.sim.test.ts` (simulator)
+- Third-party verification: `packages/midnight/src/client.ts` (`verify()`), the
+  `instinct midnight verify` command, and `GET`/`POST /verify` on the adapter
+- Verifier tests: `packages/midnight/test/verify.test.ts`
 - Live transactions: `deploy/midnight-devnet/src/deploy.ts`, `src/adapter.ts`
