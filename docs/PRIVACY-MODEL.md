@@ -23,7 +23,7 @@ explicit `disclose()` at a ledger write or circuit return.
 | Attestation nullifier | Public (safe) | Midnight ledger | Makes a proof single-use so it cannot be replayed | Set to `true` in `attest`; reuse is rejected |
 | Revocation flag | Public (safe) | Midnight ledger | Lets the owner retire a memory | `active[commitment] = false` in `revoke` |
 
-## Allowances (stretch)
+## Allowances
 
 | Data | Class | Why | Mechanism |
 |---|---|---|---|
@@ -32,7 +32,7 @@ explicit `disclose()` at a ledger write or circuit return.
 | Authorized maximum | **Public by design** | An allowance is a statement, like a card limit | `limits[key]`, written with `disclose(maxAmount)` |
 | Running total | **Public by design** | Inferable from a public limit plus spends; we publish it honestly | `spent[key]` |
 | Individual spend amount | **Public via the total** | Cannot be hidden while the running total is public; we disclose it rather than pretend | `disclose(amount)` in `spend` |
-| The rule "never exceed the limit" | Enforced, not published | This is what the circuit guarantees | `assert(amount <= remaining)` |
+| The rule "never exceed the limit" | Enforced, not published | The circuit asserts it, and the runtime blocks the tool before it runs | `assert(amount <= remaining)`; `spendGate` in `packages/core/src/runtime.ts` |
 
 ## What is deliberately *not* protected
 
@@ -69,5 +69,9 @@ boundary:
 - Off-chain semantics: `deploy/midnight-devnet/test/vault.sim.test.ts` (simulator)
 - Third-party verification: `packages/midnight/src/client.ts` (`verify()`), the
   `instinct midnight verify` command, and `GET`/`POST /verify` on the adapter
+- Allowance gate: `spendGate` in `packages/core/src/runtime.ts`, wired in
+  `packages/server/src/boot.ts`, backed by `MidnightClient.checkAllowance()`
 - Verifier tests: `packages/midnight/test/verify.test.ts`
+- Allowance tests: `packages/midnight/test/allowance.test.ts`,
+  `packages/core/test/runtime.test.ts`
 - Live transactions: `deploy/midnight-devnet/src/deploy.ts`, `src/adapter.ts`

@@ -24,6 +24,8 @@ export {
   newPersistedState,
   normalizeState,
   disclosureCodeOf,
+  type AllowanceQuery,
+  type AllowanceResult,
   type CommitInput,
   type CommitResult,
   type MidnightClientOptions,

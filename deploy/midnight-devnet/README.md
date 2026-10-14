@@ -121,6 +121,11 @@ The adapter funds its own DUST on startup (`src/dust.ts`, shared with
 `deploy.ts`). Without that, a freshly synced wallet builds a transaction it can
 never pay for and every circuit call hangs instead of failing.
 
+The same read-only shape backs the allowance gate: `POST /allowance/check`
+`{ key }` replays the registry's `limits`, `spent` and `active` maps, so the
+agent can confirm a spend fits before it makes it. `/allowance/spend` is the
+call that writes and advances the running total.
+
 ## Web console
 
 The adapter also serves a runnable console at <http://127.0.0.1:6400>:

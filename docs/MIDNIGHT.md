@@ -104,16 +104,38 @@ sequenceDiagram
   A-->>O: Proof recorded. Verifier learns: health. Text stays local.
 ```
 
-### Allowance gating (stretch)
+### Allowance gating
+
+An allowance is a second, on-chain ceiling under the policy table. When a host
+configures the registry, the runtime checks it **after** the policy allows a
+gated capability and **before** the tool runs:
 
 ```mermaid
 flowchart TD
-  Ask[Spend request] --> Guard[policy guard]
-  Guard --> Check{allowance_check}
-  Check -- allowed --> Proceed[Run tool, record spend]
-  Check -- denied --> AskOwner[ask_owner YES/NO]
-  AskOwner -- approved --> Check
+  Ask[Spend request] --> Policy{policy guard}
+  Policy -- deny or ask --> Stop[stop, or ask the owner]
+  Policy -- allow --> Gate{on-chain allowance}
+  Gate -- allowed, or none authorized --> Proceed[Run tool, record spend]
+  Gate -- refused or unreachable --> Block[block, tell the owner]
 ```
+
+- Gated capabilities: `purchase`, `travel.book`, `computer.use`, `apps.use`,
+  `network.ask`, declared as `ALLOWANCE_GATED_CAPABILITIES` in
+  `packages/core/src/policy.ts`.
+- The allowance can only narrow what the policy allowed, never widen it.
+- With no allowance authorized for the triple, the JSON policy stays in charge,
+  so switching the gate on does not lock the owner out.
+- A check that cannot reach the ledger blocks the call. Failing closed is the
+  only safe direction.
+- The gate reads, it does not spend: `MidnightClient.checkAllowance()` replays
+  the registry's public `limits`, `spent` and `active` maps. Recording a spend
+  stays with `allowance_check` / `checkSpend()`.
+
+The registry key is `sha256("allowance|" + owner + "|" + spender + "|" + capability)`,
+lower-cased. The runtime uses the configured owner name as `owner` and the
+requesting principal's id as `spender` (`owner`, or `contact:sam`), so the owner
+authorizes exactly the triple they mean to cap. `npm run address`-style tooling
+aside, the key is whatever `allowanceKey()` returns for that triple.
 
 ## The proof-server adapter
 
@@ -130,6 +152,7 @@ Midnight.js SDK, and it backs the runtime client against a real chain.
 | `POST /allowance/authorize` | `{ contract, key, maxAmount }` | `{ txHash }` |
 | `POST /allowance/spend` | `{ contract, key, amount }` | `{ txHash }` |
 | `POST /allowance/revoke` | `{ contract, key }` | `{ txHash }` |
+| `POST /allowance/check` | `{ contract, key }` | `{ active, limitCents, spentCents }` (read-only) |
 | `POST /verify` | `{ attestationId }` | `{ valid, disclosed, singleUse }` |
 | `GET /verify/<attestationId>` | — | `{ valid, disclosed, singleUse }` |
 

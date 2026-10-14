@@ -23,6 +23,7 @@
  *   POST /allowance/authorize { key, maxAmount }                        -> { txHash }
  *   POST /allowance/spend     { key, amount }                           -> { txHash }
  *   POST /allowance/revoke    { key }                                   -> { txHash }
+ *   POST /allowance/check     { key }                                   -> { active, limitCents, spentCents }
  *   POST /deploy              { contract }                              -> { address, txHash }
  *   POST /verify              { attestationId }                         -> { valid, disclosed, singleUse }
  *   GET  /verify/<attestationId>                                        -> { valid, disclosed, singleUse }
@@ -168,14 +169,17 @@ async function main(): Promise<void> {
   console.log(`Adapter: vault handle ready at ${vaultAddress}`);
 
   let allowance: Awaited<ReturnType<typeof findDeployedContract>> | undefined;
+  // Kept in the outer scope so the read-only allowance check can replay the ledger.
+  let allowanceMod: Awaited<ReturnType<typeof loadModule>> | undefined;
+  let allowanceProviders: ReturnType<typeof providerSet> | undefined;
   if (allowanceAddress) {
     try {
-      const allowanceMod = await loadModule(ALLOWANCE_DIR);
+      allowanceMod = await loadModule(ALLOWANCE_DIR);
       const allowanceCompiled = CompiledContract.make('allowance-registry', allowanceMod.Contract as never).pipe(
         CompiledContract.withWitnesses(allowanceWitnesses() as never),
         CompiledContract.withCompiledFileAssets(ALLOWANCE_DIR),
       );
-      const allowanceProviders = providerSet(ctx, config, 'allowance-registry', ALLOWANCE_DIR);
+      allowanceProviders = providerSet(ctx, config, 'allowance-registry', ALLOWANCE_DIR);
       allowance = await findDeployedContract(allowanceProviders as never, {
         contractAddress: allowanceAddress,
         compiledContract: allowanceCompiled as never,
@@ -205,6 +209,28 @@ async function main(): Promise<void> {
         attestations: [...l.attestations].map(([k, v]) => ({ id: bytesToHex(k), category: Number(v) })),
         nullifiers: Number(l.nullifiers.size()),
       };
+    };
+    // Read-only allowance lookup: replay the registry's public maps for one key.
+    // No wallet, no transaction — safe to call before every gated spend.
+    const readAllowance = async (rawKey: unknown) => {
+      const keyHex = String(rawKey ?? '').replace(/^0x/, '').trim().toLowerCase();
+      if (!allowanceAddress || !allowanceMod || !allowanceProviders || !/^[0-9a-f]{64}$/.test(keyHex)) {
+        return { key: keyHex, active: false, spentCents: 0 };
+      }
+      const st = await allowanceProviders.publicDataProvider.queryContractState(allowanceAddress);
+      const l = allowanceMod.ledger((st as { data: unknown }).data) as {
+        limits: Iterable<[Uint8Array, bigint]>;
+        spent: Iterable<[Uint8Array, bigint]>;
+        active: Iterable<[Uint8Array, boolean]>;
+      };
+      const pick = (m: Iterable<[Uint8Array, bigint]>): number | undefined => {
+        for (const [k, v] of m) if (bytesToHex(k) === keyHex) return Number(v);
+        return undefined;
+      };
+      let active = false;
+      for (const [k, v] of l.active) if (bytesToHex(k) === keyHex) active = Boolean(v);
+      const limitCents = pick(l.limits);
+      return { key: keyHex, active, ...(limitCents !== undefined ? { limitCents } : {}), spentCents: pick(l.spent) ?? 0 };
     };
 
     // Third-party verification: read the public ledger and report whether an
@@ -297,6 +323,9 @@ async function main(): Promise<void> {
           const call = await (allowance as never as { callTx: Record<string, (...a: unknown[]) => Promise<{ public: { txId: string } }>> }).callTx
             .spend(hexToBytes(String(body.key)), BigInt(Number(body.amount)));
           return send(res, 200, { txHash: call.public.txId });
+        }
+        case '/allowance/check': {
+          return send(res, 200, await readAllowance(body.key));
         }
         case '/allowance/revoke': {
           if (!allowance) return send(res, 503, { error: 'allowance contract not deployed' });

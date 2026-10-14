@@ -9,6 +9,7 @@ import { streamSimple } from "@earendil-works/pi-ai/compat";
 import type { Model } from "@earendil-works/pi-ai";
 import type { StreamFn } from "@earendil-works/pi-agent-core";
 import {
+  ALLOWANCE_GATED_CAPABILITIES,
   AgentRuntime,
   A2AStore,
   ApprovalStore,
@@ -26,7 +27,7 @@ import {
   resolveDataDir,
   resolveModel,
 } from "@open-instinct/core";
-import type { InboundMessage, InstinctConfig, Outbox, RegisteredTool } from "@open-instinct/core";
+import type { InboundMessage, InstinctConfig, Outbox, RegisteredTool, SpendGate } from "@open-instinct/core";
 import { InkboxA2A, InkboxChannel, InkboxInboundHydrator, InkboxProvisioner, messagingTools, sendFileTool } from "@open-instinct/inkbox";
 import { computerGuidance, detectComputer } from "@open-instinct/computer";
 import type { ComputerBackend } from "@open-instinct/computer";
@@ -173,6 +174,9 @@ export async function boot(env: NodeJS.ProcessEnv, opts: BootOptions = {}): Prom
   // Off unless MIDNIGHT_MODE (or a contract address) is set, so the agent always boots.
   const midnightCfg = midnightEnv(env);
   let midnightClient: MidnightClient | undefined;
+  // The on-chain allowance is an extra ceiling on top of the policy: consulted
+  // only after the policy allows, and only for the capabilities it can gate.
+  let spendGate: SpendGate | undefined;
   if (midnightCfg) {
     const stored = state.readJson<Partial<PersistedState>>(MIDNIGHT_STATE_FILE, {});
     const vaultKey = typeof stored.vaultKey === "string" && stored.vaultKey ? stored.vaultKey : randomBytes(16).toString("hex");
@@ -185,6 +189,20 @@ export async function boot(env: NodeJS.ProcessEnv, opts: BootOptions = {}): Prom
       vaultKey,
       ...(opts.fetchImpl ? { fetchImpl: opts.fetchImpl } : {}),
     });
+    const client = midnightClient;
+    spendGate = async ({ principal, capabilities, amountUsd }) => {
+      const capability = capabilities.find((c) => ALLOWANCE_GATED_CAPABILITIES.has(c));
+      if (!capability) return { allowed: true };
+      const check = await client.checkAllowance({
+        owner: config.owner.name,
+        spender: principal.id,
+        capability,
+        ...(amountUsd !== undefined ? { amountUsd } : {}),
+      });
+      // No on-chain allowance for this triple: the JSON policy stays in charge.
+      if (!check.active) return { allowed: true };
+      return check.allowed ? { allowed: true } : { allowed: false, reason: check.reason };
+    };
     const shielded = new ShieldedMemory({ inner: memory, client: midnightClient, audit, conversationKey: "system", principalId: "owner" });
     registry.registerMany(
       midnightTools({
@@ -340,6 +358,7 @@ export async function boot(env: NodeJS.ProcessEnv, opts: BootOptions = {}): Prom
     outbox,
     a2aStore,
     ...(a2a ? { loadA2ATask: (taskId: string) => a2a.getTask(taskId) } : {}),
+    ...(spendGate ? { spendGate } : {}),
     skillsPrompt,
     streamFn: opts.streamFn ?? (streamSimple as StreamFn),
     getApiKey: (provider: string) => apiKeyFor(provider, env),

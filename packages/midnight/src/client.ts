@@ -99,6 +99,26 @@ export interface SpendCheckResult {
   reason: string;
 }
 
+export interface AllowanceQuery {
+  owner: string;
+  spender: string;
+  capability: string;
+  /** When given, the check also answers "would this amount still fit?". */
+  amountUsd?: number;
+}
+
+export interface AllowanceResult {
+  key: string;
+  active: boolean;
+  allowed: boolean;
+  spentCents: number;
+  spentUsd: number;
+  limitCents?: number;
+  limitUsd?: number;
+  remainingCents?: number;
+  reason: string;
+}
+
 export interface MidnightStatus {
   mode: string;
   proofUrl?: string;
@@ -415,6 +435,68 @@ export class MidnightClient {
    * can turn it into an ask_owner flow. Amounts stay off-ledger in mock; the
    * remote circuit takes the amount as a witness.
    */
+  /**
+   * Read-only allowance check: is there a live allowance for this
+   * (owner, spender, capability) triple, and would the amount fit? Unlike
+   * `checkSpend` this records nothing, so it is safe as a pre-flight gate.
+   * A missing allowance returns allowed:false, never an error.
+   */
+  async checkAllowance(input: AllowanceQuery): Promise<AllowanceResult> {
+    const key = allowanceKey(input.owner, input.spender, input.capability);
+    let active = false;
+    let limitCents: number | undefined;
+    let spentCents = 0;
+    if (this.mode === "mock") {
+      const row = this.state.allowances[key];
+      active = Boolean(row?.active);
+      limitCents = row?.maxCents;
+      spentCents = row?.spentCents ?? 0;
+    } else {
+      if (!this.env.proofUrl) throw new Error(`${this.mode} mode needs MIDNIGHT_PROOF_URL`);
+      const parsed = (await postJson(this.fetchImpl, `${this.env.proofUrl}/allowance/check`, {
+        contract: this.env.allowanceAddress ?? this.env.contractAddress,
+        key,
+      })) as { active?: unknown; limitCents?: unknown; spentCents?: unknown };
+      active = parsed?.active === true;
+      limitCents = typeof parsed?.limitCents === "number" ? parsed.limitCents : undefined;
+      spentCents = typeof parsed?.spentCents === "number" ? parsed.spentCents : 0;
+    }
+    const base = {
+      key,
+      active,
+      spentCents,
+      spentUsd: centsToUsd(spentCents),
+      ...(limitCents !== undefined ? { limitCents, limitUsd: centsToUsd(limitCents) } : {}),
+    };
+    if (!active) return { ...base, allowed: false, reason: "no active on-chain allowance for this (owner, spender, capability)" };
+    if (limitCents === undefined) return { ...base, allowed: false, reason: "the allowance has no limit recorded on the ledger" };
+    const remainingCents = Math.max(0, limitCents - spentCents);
+    if (input.amountUsd === undefined) {
+      return {
+        ...base,
+        allowed: remainingCents > 0,
+        remainingCents,
+        reason: `allowance live: $${centsToUsd(spentCents).toFixed(2)} of $${centsToUsd(limitCents).toFixed(2)} spent`,
+      };
+    }
+    const amountCents = usdToCents(input.amountUsd);
+    if (amountCents <= 0) return { ...base, allowed: false, remainingCents, reason: "amount must be positive" };
+    if (amountCents > remainingCents) {
+      return {
+        ...base,
+        allowed: false,
+        remainingCents,
+        reason: `$${centsToUsd(amountCents).toFixed(2)} exceeds the $${centsToUsd(remainingCents).toFixed(2)} left of the on-chain allowance`,
+      };
+    }
+    return {
+      ...base,
+      allowed: true,
+      remainingCents,
+      reason: `within the on-chain allowance: $${centsToUsd(spentCents + amountCents).toFixed(2)} of $${centsToUsd(limitCents).toFixed(2)}`,
+    };
+  }
+
   async checkSpend(input: SpendCheckInput): Promise<SpendCheckResult> {
     const key = allowanceKey(input.owner, input.spender, input.capability);
     const amountCents = usdToCents(input.amountUsd);
