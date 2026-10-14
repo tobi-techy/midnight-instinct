@@ -104,16 +104,38 @@ sequenceDiagram
   A-->>O: Proof recorded. Verifier learns: health. Text stays local.
 ```
 
-### Allowance gating (stretch)
+### Allowance gating
+
+An allowance is a second, on-chain ceiling under the policy table. When a host
+configures the registry, the runtime checks it **after** the policy allows a
+gated capability and **before** the tool runs:
 
 ```mermaid
 flowchart TD
-  Ask[Spend request] --> Guard[policy guard]
-  Guard --> Check{allowance_check}
-  Check -- allowed --> Proceed[Run tool, record spend]
-  Check -- denied --> AskOwner[ask_owner YES/NO]
-  AskOwner -- approved --> Check
+  Ask[Spend request] --> Policy{policy guard}
+  Policy -- deny or ask --> Stop[stop, or ask the owner]
+  Policy -- allow --> Gate{on-chain allowance}
+  Gate -- allowed, or none authorized --> Proceed[Run tool, record spend]
+  Gate -- refused or unreachable --> Block[block, tell the owner]
 ```
+
+- Gated capabilities: `purchase`, `travel.book`, `computer.use`, `apps.use`,
+  `network.ask`, declared as `ALLOWANCE_GATED_CAPABILITIES` in
+  `packages/core/src/policy.ts`.
+- The allowance can only narrow what the policy allowed, never widen it.
+- With no allowance authorized for the triple, the JSON policy stays in charge,
+  so switching the gate on does not lock the owner out.
+- A check that cannot reach the ledger blocks the call. Failing closed is the
+  only safe direction.
+- The gate reads, it does not spend: `MidnightClient.checkAllowance()` replays
+  the registry's public `limits`, `spent` and `active` maps. Recording a spend
+  stays with `allowance_check` / `checkSpend()`.
+
+The registry key is `sha256("allowance|" + owner + "|" + spender + "|" + capability)`,
+lower-cased. The runtime uses the configured owner name as `owner` and the
+requesting principal's id as `spender` (`owner`, or `contact:sam`), so the owner
+authorizes exactly the triple they mean to cap. `npm run address`-style tooling
+aside, the key is whatever `allowanceKey()` returns for that triple.
 
 ## The proof-server adapter
 
@@ -130,6 +152,14 @@ Midnight.js SDK, and it backs the runtime client against a real chain.
 | `POST /allowance/authorize` | `{ contract, key, maxAmount }` | `{ txHash }` |
 | `POST /allowance/spend` | `{ contract, key, amount }` | `{ txHash }` |
 | `POST /allowance/revoke` | `{ contract, key }` | `{ txHash }` |
+| `POST /allowance/check` | `{ contract, key }` | `{ active, limitCents, spentCents }` (read-only) |
+| `POST /verify` | `{ attestationId }` | `{ valid, disclosed, singleUse }` |
+| `GET /verify/<attestationId>` | — | `{ valid, disclosed, singleUse }` |
+
+`POST /commit`, `POST /attest` and the allowance calls are the only writes;
+everything else, `/verify` included, is a read. The adapter funds its own DUST
+on startup (`src/dust.ts`) so a freshly synced wallet can pay for the
+transactions it submits instead of hanging on a fee it cannot cover.
 
 A local reference implementation backs these with `midnight-local-dev` for
 development; a testnet implementation uses a funded wallet. Both are described
@@ -223,6 +253,38 @@ indexer confirming the commitment and nullifier.
 
 ## Verifying a proof
 
+Anyone can check a proof without the agent, the wallet or the seed phrase. The
+ledger is the source of truth: an attestation is recorded when the proof lands,
+and a nullifier is recorded when it is spent, so verifying is a read.
+
+```sh
+# A third party points at the adapter and asks about one attestation:
+instinct midnight verify <attestationId>
+#   Verified — valid health proof (single-use, cannot be replayed)
+#     disclosed: health (code 1)
+#     single-use: yes (cannot be replayed)
+#     public URL: http://127.0.0.1:6400/verify/<attestationId>
+
+# Ask a stricter question — does it prove *this* category?
+instinct midnight verify <attestationId> --expect health    # exit 0
+instinct midnight verify <attestationId> --expect finance   # exit 1, mismatch
+```
+
+What this buys you:
+
+- **No trust in the agent.** `verify()` reads the chain, not the agent's word.
+- **Selective disclosure is what the ledger says.** Only the disclosed category
+  comes back; the plaintext never leaves the owner's machine.
+- **Single use.** A spent attestation has a nullifier, and `singleUse` reports it.
+- **Challenge binding.** A verifier can hand the prover a
+  `prove --challenge <64hex>`, so the proof answers that challenge and cannot be
+  replayed for another one.
+
+The same check is a plain HTTP call (`GET /verify/<id>`), so a relying party can
+integrate it without our code.
+
+To inspect a proof by hand:
+
 1. `instinct midnight list` shows each commitment with its category and tx hash.
 2. Open the tx in the explorer (`MIDNIGHT_EXPLORER_URL`).
 3. Confirm the ledger holds a 32-byte commitment and a category code — and no
@@ -236,5 +298,7 @@ indexer confirming the commitment and nullifier.
 2. *"what do you remember?"* (as the owner) → full recall from `MEMORY.md`.
 3. *"prove to my partner I have a health note, but don't reveal it."*
    → selective-disclosure proof + tx. Verifier learns `health`, nothing else.
-4. `instinct midnight list` → the commitment row, no plaintext.
-5. Open the tx in the explorer → a hash and a category code, no words.
+4. The partner runs `instinct midnight verify <attestationId> --expect health`
+   → `Verified`, exit 0. Switch to `--expect finance` → `Mismatch`, exit 1.
+5. `instinct midnight list` → the commitment row, no plaintext.
+6. Open the tx in the explorer → a hash and a category code, no words.

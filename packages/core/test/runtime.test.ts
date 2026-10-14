@@ -11,7 +11,7 @@ import { MemoryStore } from "../src/memory.js";
 import { PolicyEngine, defaultPolicy } from "../src/policy.js";
 import { coreTools } from "../src/core-tools.js";
 import { A2AStore } from "../src/a2a-state.js";
-import { AgentRuntime, InboundUncertainError, SESSION_KEEP_MESSAGES, hashArgs, restoreMessages, runtimeKey, stableJson, type Outbox, type RuntimeDeps } from "../src/runtime.js";
+import { AgentRuntime, InboundUncertainError, SESSION_KEEP_MESSAGES, hashArgs, restoreMessages, runtimeKey, stableJson, type Outbox, type RuntimeDeps, type SpendGateRequest } from "../src/runtime.js";
 import { Scheduler } from "../src/scheduler.js";
 import { ToolRegistry, defineTool, textResult, type RegisteredTool } from "../src/tools.js";
 import type { InboundMessage, OutboundMessage, Policy, Principal } from "../src/types.js";
@@ -437,6 +437,62 @@ describe("policy guard", () => {
     expect(toolResult.role === "toolResult" && toolResult.isError).toBe(true);
     expect(JSON.stringify(toolResult.content)).toContain("Blocked by policy");
     expect(h.deps.approvals.pending()).toHaveLength(0);
+  });
+
+  it("consults the allowance gate after the policy allows, and blocks on a refusal", async () => {
+    const seen: SpendGateRequest[] = [];
+    const h = harness({
+      deps: {
+        spendGate: async (req) => {
+          seen.push(req);
+          return { allowed: false, reason: "$20 exceeds the $0 left of the on-chain allowance" };
+        },
+      },
+    });
+    h.faux.setResponses([toolTurn("buy", { item: "chips", merchant: "Corner Store", amountUsd: 20 }), textTurn("The allowance is used up.")]);
+    const result = await h.runtime.handleInbound(inbound({ channel: "chat", from: "owner", conversationKey: "chat:main", text: "buy chips" }));
+    expect(result.reply).toBe("The allowance is used up.");
+    expect(h.calls).toHaveLength(0);
+    expect(seen).toHaveLength(1);
+    expect(seen[0]).toMatchObject({ toolName: "buy", capabilities: ["purchase"], amountUsd: 20 });
+    const conv = h.runtime.conversation("chat:main", h.runtime.ownerPrincipal());
+    const toolResult = conv.agent.state.messages.find((m) => m.role === "toolResult")!;
+    expect(JSON.stringify(toolResult.content)).toContain("Blocked by the on-chain allowance");
+    expect(h.deps.audit.read({ kinds: ["policy"] }).some((e) => e.detail.via === "allowance")).toBe(true);
+  });
+
+  it("runs the tool when the allowance gate allows it", async () => {
+    const h = harness({ deps: { spendGate: async () => ({ allowed: true }) } });
+    h.faux.setResponses([toolTurn("buy", { item: "chips", merchant: "Corner Store", amountUsd: 20 }), textTurn("Bought.")]);
+    await h.runtime.handleInbound(inbound({ channel: "chat", from: "owner", conversationKey: "chat:main", text: "buy chips" }));
+    expect(h.calls).toHaveLength(1);
+  });
+
+  it("treats an unverifiable allowance as a block, never as a silent allow", async () => {
+    const h = harness({
+      deps: {
+        spendGate: async () => {
+          throw new Error("ledger unreachable");
+        },
+      },
+    });
+    h.faux.setResponses([toolTurn("buy", { item: "chips", merchant: "Corner Store", amountUsd: 20 }), textTurn("I could not verify that.")]);
+    await h.runtime.handleInbound(inbound({ channel: "chat", from: "owner", conversationKey: "chat:main", text: "buy chips" }));
+    expect(h.calls).toHaveLength(0);
+    const conv = h.runtime.conversation("chat:main", h.runtime.ownerPrincipal());
+    const toolResult = conv.agent.state.messages.find((m) => m.role === "toolResult")!;
+    expect(JSON.stringify(toolResult.content)).toContain("could not be checked");
+  });
+
+  it("never asks the gate for a tool the policy blocked", async () => {
+    const calls: SpendGateRequest[] = [];
+    const policy = defaultPolicy();
+    policy.spend.blockedMerchants = ["casino"];
+    const h = harness({ policy, deps: { spendGate: async (req) => (calls.push(req), { allowed: true }) } });
+    h.faux.setResponses([toolTurn("buy", { item: "chips", merchant: "Lucky Casino", amountUsd: 20 }), textTurn("I cannot buy that.")]);
+    await h.runtime.handleInbound(inbound({ channel: "chat", from: "owner", conversationKey: "chat:main", text: "buy chips" }));
+    expect(calls).toHaveLength(0);
+    expect(h.calls).toHaveLength(0);
   });
 
   it("tells the owner once per conversation per hour when it declines someone else's request", async () => {

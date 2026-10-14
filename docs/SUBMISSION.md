@@ -13,14 +13,21 @@ of an agent's spending: you either trust it or you don't.
 ## What we built
 
 We took **Open Instinct**, a real personal agent you text on iMessage, and gave
-it a shielded memory vault on Midnight. Three verbs:
+it a shielded memory vault on Midnight. Four verbs:
 
 1. **Commit** — a memory is saved locally and anchored as an opaque commitment
    on Midnight. The text never leaves the host.
 2. **Prove** — the agent answers a yes/no question about a memory (does a health
    note exist?) by writing only a category code and a single-use nullifier.
-3. **Spend** — allowances are enforced by a circuit, so a prompt-injected agent
-   cannot exceed a limit.
+3. **Verify** — anyone can check that proof against the ledger: no wallet, no
+   seed, no cooperation from the agent. `instinct midnight verify <id>` reports
+   the disclosed category and that the proof is single-use, and a verifier can
+   hand the prover a challenge so a proof cannot be replayed for another one.
+4. **Spend** — allowances are bound to their owner and enforced by a circuit, so
+   a prompt-injected agent cannot exceed a limit. The runtime also checks the
+   live allowance before a gated action runs (`purchase`, `travel.book`,
+   `computer.use`, `apps.use`, `network.ask`) and fails closed if the ledger
+   cannot be reached, so the limit holds outside the agent's own code.
 
 The plaintext stays in `MEMORY.md`; the chain sees commitments, owner bindings,
 a hiding commitment to each memory's category (the plain code appears only when
@@ -45,8 +52,12 @@ is enforced by the compiler via `disclose()`.
   deploy vault, `commit`, `attest`, deploy allowance.
 - The agent's own client drives the chain through a REST adapter:
   `packages/midnight/scripts/adapter-roundtrip.mjs`.
-- Three test layers: Compact-runtime **simulator** tests (7), the agent's
-  runtime tests (13), the server suite (97), plus an indexer-backed e2e check.
+- On that devnet, a deployed attestation was verified by reading the ledger
+  only, a fresh commit → attest → verify round-trip passed, and an allowance
+  read went from none, to `$50` authorized, to `$20` spent.
+- Four test layers: Compact-runtime **simulator** tests (13), the midnight
+  package (32), the core agent suite (224) and the server suite (98), plus an
+  indexer-backed e2e check.
 - A **runnable web console** at `http://127.0.0.1:6400` after `npm run adapter`.
 
 ## Mapping to the judging criteria
@@ -55,7 +66,7 @@ is enforced by the compiler via `disclose()`.
 |---|---|
 | Engineering & implementation | `contracts/`, `packages/midnight/`, the adapter; genuine private state in `witnesses.ts` |
 | Quality assurance & reliability | simulator tests, e2e chain check, existing suites; mock mode keeps demos alive |
-| Product & vision | a working agent, not a demo dApp; commit/prove/spend is a coherent story |
+| Product & vision | a working agent, not a demo dApp; commit/prove/verify/spend is a coherent story |
 | User experience & design | the primary UX is iMessage; a web console proves the same model visually |
 | Communication | `docs/MIDNIGHT.md`, `ARCH-MIDNIGHT.md`, `PRIVACY-MODEL.md`, this brief |
 | Business development & viability | allowances map to real spend-control demand; the vault is a reusable primitive |

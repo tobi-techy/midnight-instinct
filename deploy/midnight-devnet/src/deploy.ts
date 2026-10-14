@@ -19,6 +19,7 @@ import * as Rx from 'rxjs';
 
 import { resolveNetwork, getOrCreateWallet, formatWalletBackupNotice } from './network';
 import { createWallet, persistWalletState, unshieldedToken, type WalletContext } from './wallet';
+import { ensureDust } from './dust';
 import {
   ALLOWANCE_PRIVATE_STATE_ID,
   VAULT_PRIVATE_STATE_ID,
@@ -42,7 +43,6 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const VAULT_DIR = path.resolve(__dirname, '..', 'contracts', 'managed', 'memory-vault');
 const ALLOWANCE_DIR = path.resolve(__dirname, '..', 'contracts', 'managed', 'allowance-registry');
 const OUT_FILE = path.resolve(__dirname, '..', 'deployment.json');
-const DUST_WAIT_TIMEOUT_MS = Number(process.env.MIDNIGHT_DUST_TIMEOUT_MS) || 15 * 60 * 1000;
 
 const hex = (u8: Uint8Array): string => Buffer.from(u8).toString('hex');
 const sha256 = (s: string): Uint8Array => createHash('sha256').update(s, 'utf8').digest();
@@ -70,30 +70,6 @@ async function waitForProofServer(url: string, maxAttempts = 60, delayMs = 2000)
     }
   }
   return false;
-}
-
-/**
- * Bound a wallet SDK wait by its configured deadline. The SDK can stay pending
- * forever (a wallet that never emits a synced DUST state), which would take the
- * script past the deadline it just printed to the operator.
- */
-function withDeadline<T>(work: Promise<T>, ms: number, what: string): Promise<T> {
-  return new Promise<T>((resolve, reject) => {
-    const timer = setTimeout(
-      () => reject(new Error(`timed out after ${Math.round(ms / 1000)}s waiting for ${what}`)),
-      ms,
-    );
-    work.then(
-      (value) => {
-        clearTimeout(timer);
-        resolve(value);
-      },
-      (err) => {
-        clearTimeout(timer);
-        reject(err as Error);
-      },
-    );
-  });
 }
 
 function walletProviders(ctx: WalletContext) {
@@ -137,47 +113,6 @@ function contractProviders(
   };
 }
 
-async function ensureDust(ctx: WalletContext): Promise<void> {
-  const dustState = await Rx.firstValueFrom(ctx.wallet.state().pipe(Rx.filter((s) => s.isSynced)));
-  const unregistered = dustState.unshielded.availableCoins.filter(
-    (c) => !(c as { meta?: { registeredForDustGeneration?: boolean } }).meta?.registeredForDustGeneration,
-  );
-  if (unregistered.length > 0) {
-    console.log(`  Registering ${unregistered.length} NIGHT UTXO(s) for DUST generation...`);
-    // A registration built too soon after funding has no DUST yet to pay its own
-    // fee and throws before signing. Wait until the NIGHT already generates
-    // enough to cover the estimated fee (see the funding guide).
-    try {
-      const { fee } = await ctx.wallet.estimateRegistration(unregistered);
-      console.log(`  Waiting for generated DUST to cover the registration fee (${fee})...`);
-      await withDeadline(
-        ctx.wallet.waitForGeneratedDust(unregistered, fee),
-        DUST_WAIT_TIMEOUT_MS,
-        'DUST to cover the registration fee',
-      );
-    } catch (err) {
-      console.log(`  (registration fee estimate unavailable: ${err instanceof Error ? err.message : String(err)}; proceeding)`);
-    }
-    const recipe = await ctx.wallet.registerNightUtxosForDustGeneration(
-      unregistered,
-      ctx.unshieldedKeystore.getPublicKey(),
-      (payload) => ctx.unshieldedKeystore.signData(payload),
-    );
-    const finalized = await ctx.wallet.finalizeRecipe(recipe);
-    await ctx.wallet.submitTransaction(finalized);
-  }
-  if (dustState.dust.balance(new Date()) === 0n) {
-    console.log('  Waiting for DUST...');
-    await Rx.firstValueFrom(
-      ctx.wallet.state().pipe(
-        Rx.throttleTime(5000),
-        Rx.filter((s) => s.isSynced),
-        Rx.filter((s) => s.dust.balance(new Date()) > 0n),
-        Rx.timeout({ first: DUST_WAIT_TIMEOUT_MS }),
-      ),
-    );
-  }
-}
 
 async function main(): Promise<void> {
   const { network, config: networkConfig } = resolveNetwork();

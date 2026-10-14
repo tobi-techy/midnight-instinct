@@ -23,6 +23,9 @@ export {
   MidnightClient,
   newPersistedState,
   normalizeState,
+  disclosureCodeOf,
+  type AllowanceQuery,
+  type AllowanceResult,
   type CommitInput,
   type CommitResult,
   type MidnightClientOptions,
@@ -32,6 +35,8 @@ export {
   type ProveResult,
   type SpendCheckInput,
   type SpendCheckResult,
+  type VerifyInput,
+  type VerifyResult,
 } from "./client.js";
 export { ShieldedMemory, type AnchoredWrite, type ShieldedMemoryOptions } from "./memory.js";
 export { midnightTools, type MidnightToolDeps } from "./tools.js";

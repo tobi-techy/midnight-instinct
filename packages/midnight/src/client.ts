@@ -10,7 +10,7 @@
  * the smoke test run with no faucet and no network.
  */
 import { randomBytes } from "node:crypto";
-import { allowanceKey, centsToUsd, mockCommitmentOf, newAttestationId, parseCategory, preimageOf, usdToCents, type CategoryLabel } from "./commit.js";
+import { allowanceKey, centsToUsd, categoryName, CATEGORIES, CATEGORY_CODES, mockCommitmentOf, newAttestationId, parseCategory, preimageOf, usdToCents, type CategoryLabel } from "./commit.js";
 import type { MidnightEnv } from "./config.js";
 
 export interface CommitInput {
@@ -34,6 +34,12 @@ export interface ProveInput {
   commitment: string;
   /** What the verifier learns: a category label, or "existence" for proof-of-existence only. */
   disclose?: string;
+  /**
+   * Optional verifier-chosen challenge (64 hex chars). When a verifier sends a
+   * fresh nonce, pass it here so the proof is bound to that verification
+   * request and cannot be replayed elsewhere. Generated when omitted.
+   */
+  attestationId?: string;
 }
 
 export interface ProveResult {
@@ -43,6 +49,36 @@ export interface ProveResult {
   txHash: string;
   mode: string;
   explorerUrl?: string;
+}
+
+export interface VerifyInput {
+  /** The single-use proof id the prover shared. */
+  attestationId: string;
+  /** Optional expected disclosure. Verification fails the match if the ledger disagrees. */
+  expect?: string;
+}
+
+/**
+ * The result a third party gets when checking a proof. Nothing here reveals the
+ * memory: only whether the attestation is on the ledger, which single category
+ * it disclosed, and that it is single-use.
+ */
+export interface VerifyResult {
+  attestationId: string;
+  /** True when the attestation is recorded on the ledger (mock: in local state). */
+  valid: boolean;
+  /** Disclosed code: 0 for bare existence, 1-5 for a category. */
+  disclosed: number;
+  disclosedLabel: string;
+  /** True when the nullifier is spent, so the proof cannot be replayed. */
+  singleUse: boolean;
+  /** Present only when `expect` was given: whether the ledger matches it. */
+  categoryMatches?: boolean;
+  mode: string;
+  contractAddress?: string;
+  /** Human-openable verification URL on the adapter, when remote. */
+  verifyUrl?: string;
+  reason: string;
 }
 
 export interface SpendCheckInput {
@@ -60,6 +96,26 @@ export interface SpendCheckResult {
   limitCents?: number;
   limitUsd?: number;
   txHash?: string;
+  reason: string;
+}
+
+export interface AllowanceQuery {
+  owner: string;
+  spender: string;
+  capability: string;
+  /** When given, the check also answers "would this amount still fit?". */
+  amountUsd?: number;
+}
+
+export interface AllowanceResult {
+  key: string;
+  active: boolean;
+  allowed: boolean;
+  spentCents: number;
+  spentUsd: number;
+  limitCents?: number;
+  limitUsd?: number;
+  remainingCents?: number;
   reason: string;
 }
 
@@ -155,6 +211,19 @@ function requiredField(parsed: unknown, field: string, what: string): string {
     throw new Error(`proof-server returned no ${field} for ${what}: refusing to record an anchor that never landed`);
   }
   return v;
+}
+
+/**
+ * Map a disclosure label to its ledger code. Throws on an unknown label so a
+ * verifier's stated expectation is never silently downgraded to "other".
+ */
+export function disclosureCodeOf(label: string): number {
+  const v = label.trim().toLowerCase();
+  if (v === "" || v === "existence" || v === "0") return 0;
+  if (!(CATEGORIES as readonly string[]).includes(v)) {
+    throw new Error(`unknown category "${label}"; use existence or one of ${CATEGORIES.join(", ")}`);
+  }
+  return CATEGORY_CODES[v as CategoryLabel];
 }
 
 export class MidnightClient {
@@ -259,8 +328,11 @@ export class MidnightClient {
     if (disclosed !== 0 && disclosed !== row.code) {
       throw new Error(`cannot disclose ${disclosedLabel}: this memory was committed as ${row.category}`);
     }
-    const attestationId = newAttestationId();
-    if (this.state.nullifiers[attestationId]) throw new Error("attestation collision: retry");
+    const attestationId = (input.attestationId ?? newAttestationId()).trim().toLowerCase();
+    if (!/^[0-9a-f]{64}$/.test(attestationId)) throw new Error("attestationId must be 64 hex chars");
+    if (this.state.nullifiers[attestationId]) {
+      throw new Error(input.attestationId ? "attestation challenge already used: ask the verifier for a fresh one" : "attestation collision: retry");
+    }
     let txHash: string;
     if (this.mode === "mock") {
       txHash = `mock_attest_${attestationId.slice(0, 16)}`;
@@ -279,6 +351,59 @@ export class MidnightClient {
     const { explorerTxUrl } = await import("./config.js");
     const explorerUrl = explorerTxUrl(this.env, txHash);
     return { attestationId, disclosed, disclosedLabel, txHash, mode: this.mode, ...(explorerUrl ? { explorerUrl } : {}) };
+  }
+
+  /**
+   * Verify a proof without revealing the memory. This is the third-party side:
+   * given an attestation id the prover shared, read the public ledger and report
+   * whether it is recorded, which single category it disclosed, and that it is
+   * single-use. Mock mode reads the local stand-in ledger; local/testnet ask the
+   * adapter, which reads the deployed contract. No seed or private state needed.
+   */
+  async verify(input: VerifyInput): Promise<VerifyResult> {
+    const attestationId = input.attestationId.trim().toLowerCase();
+    if (!/^[0-9a-f]{64}$/.test(attestationId)) throw new Error("attestationId must be 64 hex chars");
+    const expect = input.expect === undefined ? undefined : disclosureCodeOf(input.expect);
+    let valid = false;
+    let disclosed = 0;
+    let singleUse = false;
+    let verifyUrl: string | undefined;
+    if (this.mode === "mock") {
+      const row = this.state.nullifiers[attestationId];
+      if (row) {
+        valid = true;
+        disclosed = row.disclosed;
+        singleUse = true;
+      }
+    } else {
+      if (!this.env.proofUrl) throw new Error(`${this.mode} mode needs MIDNIGHT_PROOF_URL`);
+      const parsed = (await postJson(this.fetchImpl, `${this.env.proofUrl}/verify`, {
+        contract: this.env.contractAddress,
+        attestationId,
+      })) as { valid?: unknown; disclosed?: unknown; singleUse?: unknown } | undefined;
+      valid = Boolean(parsed?.valid);
+      disclosed = Number(parsed?.disclosed ?? 0);
+      singleUse = Boolean(parsed?.singleUse);
+      verifyUrl = `${this.env.proofUrl}/verify/${attestationId}`;
+    }
+    const disclosedLabel = categoryName(disclosed);
+    const categoryMatches = expect === undefined ? undefined : expect === disclosed;
+    let reason: string;
+    if (!valid) reason = "no such attestation on the ledger";
+    else if (categoryMatches === false) reason = `category mismatch: expected ${String(input.expect)}, ledger discloses ${disclosedLabel}`;
+    else reason = `valid ${disclosedLabel} proof${singleUse ? " (single-use, cannot be replayed)" : ""}`;
+    return {
+      attestationId,
+      valid,
+      disclosed,
+      disclosedLabel,
+      singleUse,
+      ...(categoryMatches === undefined ? {} : { categoryMatches }),
+      mode: this.mode,
+      ...(this.env.contractAddress ? { contractAddress: this.env.contractAddress } : {}),
+      ...(verifyUrl ? { verifyUrl } : {}),
+      reason,
+    };
   }
 
   /** Authorize a (owner, spender, capability) allowance. Mock records it locally; remote submits `authorize`. */
@@ -310,6 +435,68 @@ export class MidnightClient {
    * can turn it into an ask_owner flow. Amounts stay off-ledger in mock; the
    * remote circuit takes the amount as a witness.
    */
+  /**
+   * Read-only allowance check: is there a live allowance for this
+   * (owner, spender, capability) triple, and would the amount fit? Unlike
+   * `checkSpend` this records nothing, so it is safe as a pre-flight gate.
+   * A missing allowance returns allowed:false, never an error.
+   */
+  async checkAllowance(input: AllowanceQuery): Promise<AllowanceResult> {
+    const key = allowanceKey(input.owner, input.spender, input.capability);
+    let active = false;
+    let limitCents: number | undefined;
+    let spentCents = 0;
+    if (this.mode === "mock") {
+      const row = this.state.allowances[key];
+      active = Boolean(row?.active);
+      limitCents = row?.maxCents;
+      spentCents = row?.spentCents ?? 0;
+    } else {
+      if (!this.env.proofUrl) throw new Error(`${this.mode} mode needs MIDNIGHT_PROOF_URL`);
+      const parsed = (await postJson(this.fetchImpl, `${this.env.proofUrl}/allowance/check`, {
+        contract: this.env.allowanceAddress ?? this.env.contractAddress,
+        key,
+      })) as { active?: unknown; limitCents?: unknown; spentCents?: unknown };
+      active = parsed?.active === true;
+      limitCents = typeof parsed?.limitCents === "number" ? parsed.limitCents : undefined;
+      spentCents = typeof parsed?.spentCents === "number" ? parsed.spentCents : 0;
+    }
+    const base = {
+      key,
+      active,
+      spentCents,
+      spentUsd: centsToUsd(spentCents),
+      ...(limitCents !== undefined ? { limitCents, limitUsd: centsToUsd(limitCents) } : {}),
+    };
+    if (!active) return { ...base, allowed: false, reason: "no active on-chain allowance for this (owner, spender, capability)" };
+    if (limitCents === undefined) return { ...base, allowed: false, reason: "the allowance has no limit recorded on the ledger" };
+    const remainingCents = Math.max(0, limitCents - spentCents);
+    if (input.amountUsd === undefined) {
+      return {
+        ...base,
+        allowed: remainingCents > 0,
+        remainingCents,
+        reason: `allowance live: $${centsToUsd(spentCents).toFixed(2)} of $${centsToUsd(limitCents).toFixed(2)} spent`,
+      };
+    }
+    const amountCents = usdToCents(input.amountUsd);
+    if (amountCents <= 0) return { ...base, allowed: false, remainingCents, reason: "amount must be positive" };
+    if (amountCents > remainingCents) {
+      return {
+        ...base,
+        allowed: false,
+        remainingCents,
+        reason: `$${centsToUsd(amountCents).toFixed(2)} exceeds the $${centsToUsd(remainingCents).toFixed(2)} left of the on-chain allowance`,
+      };
+    }
+    return {
+      ...base,
+      allowed: true,
+      remainingCents,
+      reason: `within the on-chain allowance: $${centsToUsd(spentCents + amountCents).toFixed(2)} of $${centsToUsd(limitCents).toFixed(2)}`,
+    };
+  }
+
   async checkSpend(input: SpendCheckInput): Promise<SpendCheckResult> {
     const key = allowanceKey(input.owner, input.spender, input.capability);
     const amountCents = usdToCents(input.amountUsd);

@@ -73,7 +73,30 @@ export interface RuntimeDeps {
   setupSummary?: () => string | undefined;
   a2aStore?: A2AStore;
   loadA2ATask?: (taskId: string) => Promise<unknown>;
+  /** On-chain allowance gate; consulted after policy allows and before a tool runs. */
+  spendGate?: SpendGate;
 }
+
+/** What the allowance gate is asked about, after the policy has already allowed the call. */
+export interface SpendGateRequest {
+  principal: Principal;
+  toolName: string;
+  capabilities: readonly Capability[];
+  amountUsd?: number;
+  args: unknown;
+}
+
+export interface SpendGateDecision {
+  allowed: boolean;
+  reason?: string;
+}
+
+/**
+ * Injected by the host and wired to the on-chain allowance registry. It is only
+ * consulted after the policy allowed a call, so a refusal can only narrow what
+ * already passed. A throw means "could not verify" and blocks the call.
+ */
+export type SpendGate = (request: SpendGateRequest) => Promise<SpendGateDecision>;
 
 export interface HandleResult {
   acked: boolean;
@@ -637,7 +660,31 @@ export class AgentRuntime {
       detail: { tool: toolName, outcome: decision.outcome, reason: decision.reason, ...(decision.outcome === "allow" && decision.viaGrant ? { viaGrant: decision.viaGrant } : {}) },
     });
 
-    if (decision.outcome === "allow") return undefined;
+    if (decision.outcome === "allow") {
+      const gate = this.deps.spendGate;
+      if (gate) {
+        const amountUsd = meta.amountUsd?.(args);
+        let gateDecision: SpendGateDecision;
+        try {
+          gateDecision = await gate({
+            principal,
+            toolName,
+            capabilities: meta.capabilities,
+            args,
+            ...(amountUsd !== undefined ? { amountUsd } : {}),
+          });
+        } catch (error) {
+          // A gate that cannot reach the ledger must not silently open the door.
+          audit.append({ kind: "policy", conversationKey: conv.key, principal: principal.id, detail: { tool: toolName, outcome: "deny", reason: "allowance check unavailable", via: "allowance" } });
+          return { block: true, reason: `The on-chain allowance could not be checked (${error instanceof Error ? error.message : String(error)}). Do not retry. Tell ${config.owner.name} the verification failed.` };
+        }
+        if (!gateDecision.allowed) {
+          audit.append({ kind: "policy", conversationKey: conv.key, principal: principal.id, detail: { tool: toolName, outcome: "deny", reason: gateDecision.reason ?? "on-chain allowance refused", via: "allowance" } });
+          return { block: true, reason: `Blocked by the on-chain allowance: ${gateDecision.reason ?? "the ledger refused this spend"}. Do not retry. Ask ${config.owner.name} to authorize a larger allowance.` };
+        }
+      }
+      return undefined;
+    }
     if (decision.outcome === "deny") {
       // Enforced twice: the requester hears a polite no, and the owner hears that it was asked.
       if (principal.kind !== "owner") {

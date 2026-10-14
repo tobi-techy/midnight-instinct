@@ -62,6 +62,19 @@ const ROWS: Record<Capability, Row> = {
 /** Capabilities that move money. The owner gets them under the spend policy; a grant never skips it. */
 export const SPEND_CAPABILITIES: ReadonlySet<Capability> = new Set(["purchase", "travel.book"]);
 
+/**
+ * Capabilities an on-chain allowance can gate, when a host wires one up: money
+ * movement plus the reach-out capabilities an owner may want to cap. The
+ * allowance is an extra ceiling on top of this table, never a way around it.
+ */
+export const ALLOWANCE_GATED_CAPABILITIES: ReadonlySet<Capability> = new Set([
+  "purchase",
+  "travel.book",
+  "computer.use",
+  "apps.use",
+  "network.ask",
+]);
+
 const TIERS: Tier[] = ["owner", "partner", "family", "friend", "contact", "stranger"];
 
 function buildTable(): Record<Tier, Record<Capability, Permission>> {

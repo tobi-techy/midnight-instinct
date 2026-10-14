@@ -23,7 +23,10 @@
  *   POST /allowance/authorize { key, maxAmount }                        -> { txHash }
  *   POST /allowance/spend     { key, amount }                           -> { txHash }
  *   POST /allowance/revoke    { key }                                   -> { txHash }
+ *   POST /allowance/check     { key }                                   -> { active, limitCents, spentCents }
  *   POST /deploy              { contract }                              -> { address, txHash }
+ *   POST /verify              { attestationId }                         -> { valid, disclosed, singleUse }
+ *   GET  /verify/<attestationId>                                        -> { valid, disclosed, singleUse }
  *   GET  /health
  */
 import * as fs from 'node:fs';
@@ -34,6 +37,7 @@ import { WebSocket } from 'ws';
 
 import { resolveNetwork, getOrCreateWallet } from './network';
 import { createWallet } from './wallet';
+import { ensureDust } from './dust';
 import {
   ALLOWANCE_PRIVATE_STATE_ID,
   VAULT_PRIVATE_STATE_ID,
@@ -140,6 +144,10 @@ async function main(): Promise<void> {
   console.log('Adapter: syncing (first run can take minutes)...');
   await ctx.wallet.waitForSyncedState();
   console.log('Adapter: wallet synced.');
+  // Fund DUST before touching the chain: an unregistered wallet reads state
+  // fine but every circuit call hangs waiting for a fee it cannot pay.
+  await ensureDust(ctx, { log: (m) => console.log(`Adapter: ${m.trim()}`) });
+  console.log('Adapter: DUST ready.');
 
   const privateState = vaultPrivateState(WALLET.seed);
   const vaultMod = await loadModule(VAULT_DIR);
@@ -161,14 +169,17 @@ async function main(): Promise<void> {
   console.log(`Adapter: vault handle ready at ${vaultAddress}`);
 
   let allowance: Awaited<ReturnType<typeof findDeployedContract>> | undefined;
+  // Kept in the outer scope so the read-only allowance check can replay the ledger.
+  let allowanceMod: Awaited<ReturnType<typeof loadModule>> | undefined;
+  let allowanceProviders: ReturnType<typeof providerSet> | undefined;
   if (allowanceAddress) {
     try {
-      const allowanceMod = await loadModule(ALLOWANCE_DIR);
+      allowanceMod = await loadModule(ALLOWANCE_DIR);
       const allowanceCompiled = CompiledContract.make('allowance-registry', allowanceMod.Contract as never).pipe(
         CompiledContract.withWitnesses(allowanceWitnesses() as never),
         CompiledContract.withCompiledFileAssets(ALLOWANCE_DIR),
       );
-      const allowanceProviders = providerSet(ctx, config, 'allowance-registry', ALLOWANCE_DIR);
+      allowanceProviders = providerSet(ctx, config, 'allowance-registry', ALLOWANCE_DIR);
       allowance = await findDeployedContract(allowanceProviders as never, {
         contractAddress: allowanceAddress,
         compiledContract: allowanceCompiled as never,
@@ -199,6 +210,53 @@ async function main(): Promise<void> {
         nullifiers: Number(l.nullifiers.size()),
       };
     };
+    // Read-only allowance lookup: replay the registry's public maps for one key.
+    // No wallet, no transaction — safe to call before every gated spend.
+    const readAllowance = async (rawKey: unknown) => {
+      const keyHex = String(rawKey ?? '').replace(/^0x/, '').trim().toLowerCase();
+      if (!allowanceAddress || !allowanceMod || !allowanceProviders || !/^[0-9a-f]{64}$/.test(keyHex)) {
+        return { key: keyHex, active: false, spentCents: 0 };
+      }
+      const st = await allowanceProviders.publicDataProvider.queryContractState(allowanceAddress);
+      const l = allowanceMod.ledger((st as { data: unknown }).data) as {
+        limits: Iterable<[Uint8Array, bigint]>;
+        spent: Iterable<[Uint8Array, bigint]>;
+        active: Iterable<[Uint8Array, boolean]>;
+      };
+      const pick = (m: Iterable<[Uint8Array, bigint]>): number | undefined => {
+        for (const [k, v] of m) if (bytesToHex(k) === keyHex) return Number(v);
+        return undefined;
+      };
+      let active = false;
+      for (const [k, v] of l.active) if (bytesToHex(k) === keyHex) active = Boolean(v);
+      const limitCents = pick(l.limits);
+      return { key: keyHex, active, ...(limitCents !== undefined ? { limitCents } : {}), spentCents: pick(l.spent) ?? 0 };
+    };
+
+    // Third-party verification: read the public ledger and report whether an
+    // attestation is recorded, which category it disclosed, and that it is
+    // single-use. No wallet, seed or private state is involved.
+    const verifyAttestation = async (rawId: unknown) => {
+      const idHex = String(rawId ?? '').replace(/^0x/, '').trim().toLowerCase();
+      if (!/^[0-9a-f]{64}$/.test(idHex)) {
+        return { attestationId: idHex, valid: false, disclosed: 0, singleUse: false, network, contractAddress: vaultAddress, reason: 'attestationId must be 64 hex chars' };
+      }
+      const st = await vaultProviders.publicDataProvider.queryContractState(vaultAddress);
+      const l = vaultMod.ledger((st as { data: unknown }).data) as {
+        attestations: Iterable<[Uint8Array, bigint]>;
+        nullifiers: Iterable<[Uint8Array, boolean]>;
+      };
+      let valid = false;
+      let disclosed = 0;
+      for (const [k, v] of l.attestations) {
+        if (bytesToHex(k) === idHex) { valid = true; disclosed = Number(v); break; }
+      }
+      let singleUse = false;
+      for (const [k] of l.nullifiers) {
+        if (bytesToHex(k) === idHex) { singleUse = true; break; }
+      }
+      return { attestationId: idHex, valid, disclosed, singleUse, network, contractAddress: vaultAddress };
+    };
 
     try {
       if (req.method === 'GET' && url === '/health') {
@@ -206,6 +264,9 @@ async function main(): Promise<void> {
       }
       if (req.method === 'GET' && url === '/state') {
         return send(res, 200, await readState());
+      }
+      if (req.method === 'GET' && url.startsWith('/verify/')) {
+        return send(res, 200, await verifyAttestation(url.slice('/verify/'.length)));
       }
       if (req.method === 'GET' && (url === '/' || url === '/index.html')) {
         if (fs.existsSync(INDEX_HTML)) {
@@ -263,11 +324,17 @@ async function main(): Promise<void> {
             .spend(hexToBytes(String(body.key)), BigInt(Number(body.amount)));
           return send(res, 200, { txHash: call.public.txId });
         }
+        case '/allowance/check': {
+          return send(res, 200, await readAllowance(body.key));
+        }
         case '/allowance/revoke': {
           if (!allowance) return send(res, 503, { error: 'allowance contract not deployed' });
           const call = await (allowance as never as { callTx: Record<string, (...a: unknown[]) => Promise<{ public: { txId: string } }>> }).callTx
             .revoke(hexToBytes(String(body.key)));
           return send(res, 200, { txHash: call.public.txId });
+        }
+        case '/verify': {
+          return send(res, 200, await verifyAttestation(body.attestationId));
         }
         case '/deploy': {
           // Contracts are deployed by `npm run setup`; report the recorded ones.

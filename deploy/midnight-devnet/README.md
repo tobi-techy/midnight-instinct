@@ -103,6 +103,29 @@ node packages/midnight/scripts/adapter-roundtrip.mjs
 
 That drives the agent's own client through a real commit → attest round-trip.
 
+## Verify a proof (third party)
+
+`GET /verify/<attestationId>` (or `POST /verify`) reports whether an attestation
+is on the ledger, which category it disclosed, and whether it has been spent.
+It is a read: no wallet, no seed, no private state.
+
+```bash
+curl -s http://127.0.0.1:6400/verify/$ATTESTATION_ID
+# {"attestationId":"…","valid":true,"disclosed":1,"singleUse":true,…}
+```
+
+From the agent side, `instinct midnight verify <id> [--expect health]` runs the
+same check and exits non-zero on a mismatch or an unknown id.
+
+The adapter funds its own DUST on startup (`src/dust.ts`, shared with
+`deploy.ts`). Without that, a freshly synced wallet builds a transaction it can
+never pay for and every circuit call hangs instead of failing.
+
+The same read-only shape backs the allowance gate: `POST /allowance/check`
+`{ key }` replays the registry's `limits`, `spent` and `active` maps, so the
+agent can confirm a spend fits before it makes it. `/allowance/spend` is the
+call that writes and advances the running total.
+
 ## Web console
 
 The adapter also serves a runnable console at <http://127.0.0.1:6400>:
@@ -167,6 +190,8 @@ register for DUST, then look the contract up on
 - `src/witnesses.ts` — the vault's Compact witness (private state).
 - `src/deploy.ts` — deploys both contracts and runs commit → attest.
 - `src/adapter.ts` — the REST service the agent's runtime client calls, plus the console.
+- `src/dust.ts` — DUST funding shared by `deploy.ts` and the adapter.
+- `src/address.ts` — prints the wallet address without syncing (for faucets).
 - `src/secret.ts` — the deterministic owner secret shared by deploy and adapter.
 - `public/index.html` — the runnable web console.
 - `test/vault.sim.test.ts` — simulator tests over the compiled circuits.

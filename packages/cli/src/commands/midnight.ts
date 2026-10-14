@@ -21,6 +21,8 @@ import { CliError, UsageError } from "../io.js";
 export const midnightOptions: OptionSpec = {
   disclose: { type: "string" },
   category: { type: "string" },
+  expect: { type: "string" },
+  challenge: { type: "string" },
 };
 
 function readState(ctx: CliContext): PersistedState {
@@ -100,13 +102,14 @@ function runList(ctx: CliContext): number {
 async function runProve(ctx: CliContext, argv: string[]): Promise<number> {
   const { values, positionals } = parse("midnight", argv, midnightOptions);
   const commitment = positionals[1];
-  if (!commitment) throw new UsageError("usage: instinct midnight prove <commitment> [--disclose health|finance|contact|preference|other|existence]", "midnight");
+  if (!commitment) throw new UsageError("usage: instinct midnight prove <commitment> [--disclose health|finance|contact|preference|other|existence] [--challenge <64hex>]", "midnight");
   const state = readState(ctx);
   if (!state.vaultKey) throw new CliError("No vault key. Run `instinct midnight init` first.");
   const client = clientOf(ctx, state);
   const disclose = str(values, "disclose");
+  const challenge = str(values, "challenge");
   try {
-    const proof = await client.prove({ commitment, ...(disclose ? { disclose } : {}) });
+    const proof = await client.prove({ commitment, ...(disclose ? { disclose } : {}), ...(challenge ? { attestationId: challenge } : {}) });
     const link = proof.explorerUrl ? `\nVerify: ${proof.explorerUrl}` : "";
     ctx.print(ctx.c.green("Proof recorded") + ` (mode ${proof.mode})`);
     ctx.print(`  disclosed: ${proof.disclosedLabel} (${proof.disclosed === 0 ? "bare existence" : `code ${proof.disclosed}`})`);
@@ -116,6 +119,32 @@ async function runProve(ctx: CliContext, argv: string[]): Promise<number> {
   } catch (err) {
     throw new CliError(err instanceof Error ? err.message : String(err));
   }
+}
+
+async function runVerify(ctx: CliContext, argv: string[]): Promise<number> {
+  const { values, positionals } = parse("midnight", argv, midnightOptions);
+  const attestationId = positionals[1];
+  if (!attestationId) throw new UsageError("usage: instinct midnight verify <attestationId> [--expect health|finance|contact|preference|other|existence]", "midnight");
+  const { c } = ctx;
+  const state = readState(ctx);
+  const client = clientOf(ctx, state);
+  const expect = str(values, "expect");
+  let out;
+  try {
+    out = await client.verify({ attestationId, ...(expect ? { expect } : {}) });
+  } catch (err) {
+    throw new CliError(err instanceof Error ? err.message : String(err));
+  }
+  if (!out.valid) {
+    ctx.print(`${c.red("Not verified")} — ${out.reason}`);
+    return 1;
+  }
+  const mismatch = out.categoryMatches === false;
+  ctx.print(`${mismatch ? c.red("Mismatch") : c.green("Verified")} — ${out.reason}`);
+  ctx.print(`  disclosed: ${out.disclosedLabel} (${out.disclosed === 0 ? "bare existence" : `code ${out.disclosed}`})`);
+  ctx.print(`  single-use: ${out.singleUse ? "yes (cannot be replayed)" : "no"}`);
+  if (out.verifyUrl) ctx.print(`  public URL: ${out.verifyUrl}`);
+  return mismatch ? 1 : 0;
 }
 
 async function runDeploy(ctx: CliContext): Promise<number> {
@@ -168,9 +197,11 @@ export async function runMidnight(ctx: CliContext, argv: string[]): Promise<numb
       return runList(ctx);
     case "prove":
       return runProve(ctx, argv);
+    case "verify":
+      return runVerify(ctx, argv);
     case "deploy":
       return runDeploy(ctx);
     default:
-      throw new UsageError(`Unknown midnight subcommand "${sub}". Use init, deploy, status, list or prove.`, "midnight");
+      throw new UsageError(`Unknown midnight subcommand "${sub}". Use init, deploy, status, list, prove or verify.`, "midnight");
   }
 }
