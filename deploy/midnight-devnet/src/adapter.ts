@@ -38,6 +38,8 @@ import { WebSocket } from 'ws';
 import { resolveNetwork, getOrCreateWallet } from './network';
 import { createWallet } from './wallet';
 import { ensureDust } from './dust';
+import { syncWithDiagnostics } from './diagnostics';
+import { reportSyncProgress } from './progress';
 import {
   ALLOWANCE_PRIVATE_STATE_ID,
   VAULT_PRIVATE_STATE_ID,
@@ -142,7 +144,9 @@ async function main(): Promise<void> {
   console.log('Adapter: building wallet...');
   const ctx = await createWallet({ network, networkConfig: config, seed: WALLET.seed });
   console.log('Adapter: syncing (first run can take minutes)...');
-  await ctx.wallet.waitForSyncedState();
+  const stopProgress = reportSyncProgress(ctx.wallet);
+  await syncWithDiagnostics('Adapter: wallet sync failed', () => ctx.wallet.waitForSyncedState());
+  stopProgress();
   console.log('Adapter: wallet synced.');
   // Fund DUST before touching the chain: an unregistered wallet reads state
   // fine but every circuit call hangs waiting for a fee it cannot pay.

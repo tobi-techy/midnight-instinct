@@ -75,15 +75,29 @@ Notes:
 
 - Only the proof server runs locally; the node and indexer are Blockfrost.
   The Midnight-hosted Preprod endpoints shut down from 22:00 UTC on 2026-10-09.
-- A fresh wallet syncs from genesis (Preprod is ~2.9M blocks), which takes
-  **over an hour**; later runs reuse `midnight-level-db/` and
-  `.midnight-wallet-state/`. The SDK may log
+- A fresh wallet syncs from genesis (Preprod was at height 2,976,341 when this
+  was written), which takes hours: the dust view alone replays ~1.7M events at
+  a couple of hundred per second. `deploy` logs per-child progress
+  (`SYNC_PROGRESS: shielded=… unshielded=… dust=…`, with what each has applied
+  and how far behind it is) and checkpoints `.midnight-wallet-state/` every
+  five minutes while it syncs, so an interruption resumes instead of starting
+  over. The SDK may log
   `subscribeRuntimeVersion(): disconnected` — Blockfrost's RPC declines that
   node websocket subscription, and it is harmless; the wallet syncs from the
   indexer.
+- The wallet syncs over a Blockfrost WebSocket, and that socket is dropped
+  abnormally (close code `1006`) every few minutes during a long stream. The
+  wallet SDK turns off graphql-ws's reconnect (`shouldRetry: () => false`), so a
+  single drop used to fail the sync permanently — `waitForSyncedState()` never
+  resolved and the run hung. `npm install` runs
+  `scripts/patch-wallet-sdk.mjs` (also `npm run patch:sdk`), which restores the
+  retry and logs `WS_RECONNECT: closed <code>` / `WS_RECONNECT: opened` so the
+  recovery is visible. The same patch prints the error the SDK otherwise
+  flattens into `Wallet.Sync` (`RAW_WS_ERROR: … code=1006 … CloseEvent`).
 - `deploy` waits for the faucet (default 30 min, override with
   `MIDNIGHT_FAUCET_TIMEOUT_MS`) and for DUST (default 15 min,
-  `MIDNIGHT_DUST_TIMEOUT_MS`). Both are gitignored, so an interrupted run resumes.
+  `MIDNIGHT_DUST_TIMEOUT_MS`). Interrupting here is cheap: the wallet has
+  already synced and saved its state, so the next run skips the sync.
 - Set `MIDNIGHT_WALLET_MNEMONIC` to reuse a wallet you already funded.
 
 ## Drive the chain from the agent

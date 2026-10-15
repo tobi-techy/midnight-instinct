@@ -8,6 +8,8 @@
   "scripts": {
     "compile": "compact compile ../../contracts/memory-vault.compact contracts/managed/memory-vault && compact compile ../../contracts/allowance-registry.compact contracts/managed/allowance-registry",
     "build": "tsc --noEmit || true",
+    "postinstall": "node scripts/patch-wallet-sdk.mjs",
+    "patch:sdk": "node scripts/patch-wallet-sdk.mjs",
     "setup": "tsx src/setup.ts",
     "deploy": "tsx src/deploy.ts",
     "address": "tsx src/address.ts",

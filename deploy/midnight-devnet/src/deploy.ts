@@ -20,6 +20,8 @@ import * as Rx from 'rxjs';
 import { resolveNetwork, getOrCreateWallet, formatWalletBackupNotice } from './network';
 import { createWallet, persistWalletState, unshieldedToken, type WalletContext } from './wallet';
 import { ensureDust } from './dust';
+import { syncWithDiagnostics } from './diagnostics';
+import { reportSyncProgress } from './progress';
 import {
   ALLOWANCE_PRIVATE_STATE_ID,
   VAULT_PRIVATE_STATE_ID,
@@ -125,7 +127,15 @@ async function main(): Promise<void> {
   console.log('Creating wallet...');
   const ctx = await createWallet({ network, networkConfig, seed: WALLET.seed });
   console.log('  Syncing with network (first run can take minutes)...');
-  const state = await ctx.wallet.waitForSyncedState();
+  const stopProgress = reportSyncProgress(ctx.wallet);
+  // A Preprod first sync runs for hours (the dust view alone applies ~1.7M
+  // events), and child state, which carries each cursor, is otherwise written
+  // only after the sync completes — so an interruption would restart it from
+  // genesis. Checkpoint while it runs; `restore` picks it up on the next run.
+  const checkpoint = setInterval(() => void persistWalletState(network, ctx), 5 * 60 * 1000);
+  const state = await syncWithDiagnostics('  Wallet sync failed', () => ctx.wallet.waitForSyncedState());
+  clearInterval(checkpoint);
+  stopProgress();
   await persistWalletState(network, ctx);
   const address = ctx.unshieldedKeystore.getBech32Address().toString();
   const balance = state.unshielded.balances[unshieldedToken().raw] ?? 0n;
