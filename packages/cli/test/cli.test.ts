@@ -340,6 +340,20 @@ describe("deploy", () => {
     expect(body.initialEnvVars).toContainEqual({ key: "INKBOX_BASE_URL", value: "https://inkbox.example", isSecret: false });
   });
 
+  it("passes the LLM API gateway key through as the model credential", async () => {
+    const dir = await seeded();
+    const r = await run(["deploy", "--image", "img:1", "--dry-run"], {
+      INSTINCT_DATA_DIR: dir, LLM_API_KEY: "llmapi_secret", LLMAPI_BASE_URL: "https://api.llmapi.ai/v1",
+    });
+    expect(r.code, r.err).toBe(0);
+    // LLM_API_KEY counts as a model key, so the "no model key" warning stays quiet.
+    expect(r.err).not.toContain("LLM_API_KEY in env");
+    const vars = Object.fromEntries(JSON.parse(r.out).initialEnvVars.map((v: { key: string; value: string; isSecret: boolean }) => [v.key, v]));
+    expect(vars.LLM_API_KEY).toEqual({ key: "LLM_API_KEY", value: "<redacted>", isSecret: true });
+    expect(vars.LLMAPI_BASE_URL).toEqual({ key: "LLMAPI_BASE_URL", value: "https://api.llmapi.ai/v1", isSecret: false });
+    expect(r.out).not.toContain("llmapi_secret");
+  });
+
   it("--maritime-llm asks Maritime for its metered model and points INSTINCT_MODEL at it", async () => {
     const dir = await seeded();
     const r = await run(["deploy", "--image", "img:1", "--maritime-llm", "--dry-run"], { INSTINCT_DATA_DIR: dir, OPENAI_API_KEY: "sk-mine", OPENAI_BASE_URL: "http://mine" });

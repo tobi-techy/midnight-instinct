@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { OPENAI_COMPATIBLE_PROVIDER, modelSpecOf, resolveModel } from "../src/model.js";
+import { LLMAPI_DEFAULT_BASE_URL, LLMAPI_PROVIDER, OPENAI_COMPATIBLE_PROVIDER, modelSpecOf, resolveModel } from "../src/model.js";
 
 describe("resolveModel", () => {
   it("resolves catalog models by provider/id", () => {
@@ -27,6 +27,23 @@ describe("resolveModel", () => {
 
   it("requires OPENAI_BASE_URL for openai-compatible", () => {
     expect(() => resolveModel("openai-compatible/x", {})).toThrow(/OPENAI_BASE_URL/);
+  });
+
+  it("resolves llmapi models against the gateway without a base URL", () => {
+    const m = resolveModel("llmapi/gpt-4o", { LLM_API_KEY: "llmapi-secret" });
+    expect(m.provider).toBe(LLMAPI_PROVIDER);
+    expect(m.id).toBe("gpt-4o");
+    expect(m.api).toBe("openai-completions");
+    expect(m.baseUrl).toBe(LLMAPI_DEFAULT_BASE_URL);
+    expect(modelSpecOf(m)).toBe("llmapi/gpt-4o");
+    expect(JSON.stringify(m)).not.toContain("llmapi-secret");
+  });
+
+  it("keeps slashes inside llmapi model ids and honours LLMAPI_BASE_URL", () => {
+    const m = resolveModel("llmapi/anthropic/claude-sonnet-4.5", { LLMAPI_BASE_URL: "https://proxy.internal/v1" });
+    expect(m.id).toBe("anthropic/claude-sonnet-4.5");
+    expect(m.provider).toBe(LLMAPI_PROVIDER);
+    expect(m.baseUrl).toBe("https://proxy.internal/v1");
   });
 
   it("explains bad specs with examples", () => {

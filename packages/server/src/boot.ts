@@ -427,6 +427,7 @@ export const PROVIDER_KEY_ENV: Record<string, string[]> = {
   "anthropic": ["ANTHROPIC_API_KEY", "ANTHROPIC_OAUTH_TOKEN"],
   "openai": ["OPENAI_API_KEY"],
   "openai-compatible": ["OPENAI_API_KEY"],
+  "llmapi": ["LLM_API_KEY"],
   "openai-codex": ["OPENAI_API_KEY"],
   "google": ["GEMINI_API_KEY", "GOOGLE_API_KEY"],
   "google-gemini-cli": ["GEMINI_API_KEY", "GOOGLE_API_KEY"],

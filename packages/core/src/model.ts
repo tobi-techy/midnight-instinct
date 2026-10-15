@@ -1,13 +1,17 @@
 /**
- * Model resolution. A model spec is "provider/model-id" from the Pi catalog, or
+ * Model resolution. A model spec is "provider/model-id" from the Pi catalog,
  * "openai-compatible/<model-id>" for any OpenAI-compatible endpoint (vLLM, Ollama,
- * LiteLLM, a proxy). This is the only place in core that looks at env, and only the
- * env object it is handed.
+ * LiteLLM, a proxy), or "llmapi/<model-id>" for the LLM API gateway (llmapi.ai),
+ * which fronts many vendors behind one OpenAI-compatible endpoint. This is the only
+ * place in core that looks at env, and only the env object it is handed.
  */
 import type { Model } from "@earendil-works/pi-ai";
 import { getModel, getModels, getProviders } from "@earendil-works/pi-ai/compat";
 
 export const OPENAI_COMPATIBLE_PROVIDER = "openai-compatible";
+/** The LLM API gateway: one key and one base URL for OpenAI, Anthropic, Google and others. */
+export const LLMAPI_PROVIDER = "llmapi";
+export const LLMAPI_DEFAULT_BASE_URL = "https://api.llmapi.ai/v1";
 
 const EXAMPLES = [
   "anthropic/claude-fable-5-1",
@@ -15,6 +19,7 @@ const EXAMPLES = [
   "anthropic/claude-sonnet-5-5",
   "openai/gpt-5.4",
   "openai-compatible/<model-id> (uses OPENAI_BASE_URL and OPENAI_API_KEY)",
+  "llmapi/<model-id> (uses LLM_API_KEY, base URL https://api.llmapi.ai/v1)",
 ];
 
 export function resolveModel(spec: string, env: NodeJS.ProcessEnv = {}): Model<any> {
@@ -28,6 +33,7 @@ export function resolveModel(spec: string, env: NodeJS.ProcessEnv = {}): Model<a
   const id = trimmed.slice(slash + 1);
 
   if (provider === OPENAI_COMPATIBLE_PROVIDER) return openAiCompatibleModel(id, env);
+  if (provider === LLMAPI_PROVIDER) return llmapiModel(id, env);
 
   const model = (getModel as (p: string, m: string) => Model<any> | undefined)(provider, id);
   if (model) return model;
@@ -55,13 +61,25 @@ function openAiCompatibleModel(id: string, env: NodeJS.ProcessEnv): Model<"opena
         `Set OPENAI_API_KEY too when the endpoint checks it.`,
     );
   }
-  // The API key is not stored on the model. The runtime hands it to Pi through getApiKey
-  // so secrets stay out of anything that could be logged or persisted.
+  return openAiCompletionsShape(OPENAI_COMPATIBLE_PROVIDER, id, baseUrl);
+}
+
+/**
+ * The gateway serves one OpenAI-compatible endpoint, so the model id stays whatever the
+ * gateway calls it and no base URL is needed. LLMAPI_BASE_URL overrides the default.
+ */
+function llmapiModel(id: string, env: NodeJS.ProcessEnv): Model<"openai-completions"> {
+  return openAiCompletionsShape(LLMAPI_PROVIDER, id, env.LLMAPI_BASE_URL?.trim() || LLMAPI_DEFAULT_BASE_URL);
+}
+
+// The API key is not stored on the model. The runtime hands it to Pi through getApiKey
+// so secrets stay out of anything that could be logged or persisted.
+function openAiCompletionsShape(provider: string, id: string, baseUrl: string): Model<"openai-completions"> {
   return {
     id,
     name: id,
     api: "openai-completions",
-    provider: OPENAI_COMPATIBLE_PROVIDER,
+    provider,
     baseUrl,
     reasoning: false,
     input: ["text", "image"],

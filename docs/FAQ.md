@@ -62,6 +62,7 @@ Yes. The model is `provider/model-id` from the Pi catalog.
 | Claude (default) | `INSTINCT_MODEL=anthropic/claude-fable-5-1`, `ANTHROPIC_API_KEY` |
 | OpenAI | `INSTINCT_MODEL=openai/gpt-5.4`, `OPENAI_API_KEY` |
 | Ollama, vLLM, LiteLLM, any OpenAI-compatible server | `INSTINCT_MODEL=openai-compatible/<model-id>`, `OPENAI_BASE_URL=http://localhost:11434/v1`, `OPENAI_API_KEY` if the server checks it |
+| One key for every vendor, via the LLM API gateway | `INSTINCT_MODEL=llmapi/<model-id>`, `LLM_API_KEY` |
 | No key of your own, on Maritime | `instinct deploy --maritime-llm`; Maritime injects its metered proxy |
 
 `instinct init --model provider/id` writes the choice into `config.json`. A small local

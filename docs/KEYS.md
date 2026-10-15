@@ -47,6 +47,25 @@ example `anthropic/claude-sonnet-5-5` for a cheaper agent, or any provider in Pi
 (`OPENAI_API_KEY`, `GEMINI_API_KEY`, `GROQ_API_KEY`). For an OpenAI-compatible proxy set
 `INSTINCT_MODEL=openai-compatible/<model>` plus `OPENAI_BASE_URL` and `OPENAI_API_KEY`.
 
+### One key for every vendor (LLM API)
+
+[LLM API](https://llmapi.ai) is a gateway: one key reaches OpenAI, Anthropic, Google and
+others, and it speaks the OpenAI format, so the agent talks to it the way it talks to any
+OpenAI-compatible endpoint.
+
+Variable: `LLM_API_KEY`
+
+1. Sign in to the LLM API dashboard and create a project key.
+2. `export LLM_API_KEY=llmapi_...`
+3. Set the model to `llmapi/<model-id>`, using the id the dashboard lists:
+   `INSTINCT_MODEL=llmapi/gpt-4o instinct dev`, or `instinct init --model llmapi/gpt-4o`
+   to keep it.
+
+Requests go to `https://api.llmapi.ai/v1` unless `LLMAPI_BASE_URL` overrides it. The key
+stays in the shell environment and is handed to the runtime at call time; it is never
+written to `config.json`. `instinct deploy` copies `LLM_API_KEY` (and `LLMAPI_BASE_URL`)
+into the Maritime agent the same way it copies the other keys.
+
 ## 3. Inkbox (iMessage, phone, email, agent-to-agent)
 
 Variables: `INKBOX_ADMIN_API_KEY` (your org key, used once to provision), then per agent

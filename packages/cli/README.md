@@ -30,7 +30,7 @@ Node 22.19 or newer is required.
 | `INKBOX_BASE_URL` | same | Inkbox API base, only for self-hosted Inkbox |
 | `MARITIME_API_KEY` | `deploy`, `chat --agent` | `mk_...` key with the `provision` and `deploy` scopes |
 | `MARITIME_API_URL`, `MARITIME_APP_URL` | `deploy`, `chat` | control plane and dashboard base URLs (defaults: api.maritime.sh, maritime.sh) |
-| `ANTHROPIC_API_KEY` or `OPENAI_API_KEY` + `OPENAI_BASE_URL` | `dev`, `deploy` | model access, copied into the Maritime agent on deploy |
+| `ANTHROPIC_API_KEY` or `OPENAI_API_KEY` + `OPENAI_BASE_URL`, or `LLM_API_KEY` for the LLM API gateway | `dev`, `deploy` | model access, copied into the Maritime agent on deploy |
 | `INSTINCT_MARITIME_MODEL` | `deploy --maritime-llm` | model id behind Maritime's metered proxy (default `gpt-5.4`) |
 | `COMPOSIO_API_KEY`, `COMPOSIO_TOOLKITS` | `init`, `dev`, `deploy` | Gmail, Calendar and other apps through Composio. `init` turns `apps.enabled` on when either is set; `dev` warns when the key is set but apps are off |
 | `LINK_CLIENT_ID`, `LINK_CLIENT_SECRET`, `LINK_REDIRECT_URI`, `STRIPE_PUBLISHABLE_KEY` | `deploy`, `payments` | Stripe Link Agent Wallet. `deploy` copies them into the agent when `LINK_CLIENT_ID` is set; `payments connect` uses them to build the authorize URL when no server offers one |

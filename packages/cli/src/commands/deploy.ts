@@ -89,6 +89,8 @@ export function buildCreateBody(input: DeployInput): CreateAgentBody {
     // With the Maritime LLM, Maritime injects these itself; sending our own would shadow them.
     pushVar(vars, "OPENAI_API_KEY", env.OPENAI_API_KEY, true);
     pushVar(vars, "OPENAI_BASE_URL", env.OPENAI_BASE_URL, false);
+    pushVar(vars, "LLM_API_KEY", env.LLM_API_KEY, true);
+    pushVar(vars, "LLMAPI_BASE_URL", env.LLMAPI_BASE_URL, false);
   }
   pushVar(vars, "COMPOSIO_API_KEY", env.COMPOSIO_API_KEY, true);
   pushVar(vars, "COMPOSIO_TOOLKITS", env.COMPOSIO_TOOLKITS ?? (config.apps.toolkits.length ? config.apps.toolkits.join(",") : undefined), false);
@@ -139,8 +141,8 @@ export async function runDeploy(ctx: CliContext, argv: string[]): Promise<number
 
   const has = (k: string) => body.initialEnvVars.some((v) => v.key === k);
   if (!has("INKBOX_API_KEY")) ctx.warn("No Inkbox key found (secrets/inkbox.json or INKBOX_API_KEY). The agent will boot without iMessage.");
-  if (!maritimeLlm && !has("ANTHROPIC_API_KEY") && !has("OPENAI_API_KEY")) {
-    ctx.warn("No ANTHROPIC_API_KEY or OPENAI_API_KEY in env. Pass --maritime-llm to use Maritime's metered model, or add a key in the dashboard.");
+  if (!maritimeLlm && !has("ANTHROPIC_API_KEY") && !has("OPENAI_API_KEY") && !has("LLM_API_KEY")) {
+    ctx.warn("No ANTHROPIC_API_KEY, OPENAI_API_KEY or LLM_API_KEY in env. Pass --maritime-llm to use Maritime's metered model, or add a key in the dashboard.");
   }
   if (ctx.env.LINK_CLIENT_ID && !ctx.env.LINK_REDIRECT_URI) {
     ctx.warn("LINK_CLIENT_ID is set without LINK_REDIRECT_URI. Set it to the URL Link should send the browser back to (the gateway's /oauth/link/callback/<userId>, or your tunnel's /oauth/link/callback).");

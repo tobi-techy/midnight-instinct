@@ -207,6 +207,9 @@ INSTINCT_MODEL=google/gemini-3-pro GEMINI_API_KEY=... instinct dev
 # Anything OpenAI-compatible (Ollama, vLLM, LiteLLM).
 INSTINCT_MODEL=openai-compatible/llama-4 OPENAI_BASE_URL=http://localhost:11434/v1 instinct dev
 
+# The LLM API gateway: one key for OpenAI, Anthropic, Google and others.
+INSTINCT_MODEL=llmapi/gpt-4o LLM_API_KEY=llmapi_... instinct dev
+
 # On Maritime, with no key of your own.
 instinct deploy --image ghcr.io/<you>/open-instinct-agent:latest --maritime-llm --model gpt-5.4
 ```
