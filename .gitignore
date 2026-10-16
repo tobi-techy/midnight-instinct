@@ -22,3 +22,6 @@ deploy/midnight-devnet/midnight-level-db/
 
 # Vendored third-party reference material, not part of the build.
 vendor/
+
+# Local build scratch.
+tmp/

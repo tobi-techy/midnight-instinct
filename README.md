@@ -1,4 +1,9 @@
-<p align="center"><img src="docs/assets/brand/seal-logo.jpeg" alt="Seal" width="520"></p>
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/assets/brand/seal/seal-lockup-dark.png">
+    <img src="docs/assets/brand/seal/seal-lockup.png" alt="Seal" width="420">
+  </picture>
+</p>
 
 <p align="center"><b>Seal</b> is a privacy-first personal agent. You text it. It remembers for you, and it can prove
 things about those memories on <a href="https://midnight.network/">Midnight</a> without ever revealing them.</p>
@@ -26,6 +31,8 @@ Full authorship and evidence: [docs/SUBMISSION.md](docs/SUBMISSION.md).
 ## Two ledgers
 
 The whole design is a split between what the world can read and what stays on your machine.
+
+<p align="center"><img src="docs/assets/brand/seal/readme/seal-flow.png" alt="Your memory stays on your device; Midnight stores only commitments, and anyone can check a proof without trusting Seal" width="820"></p>
 
 | Public (Midnight, Preprod) | Private (your host) |
 |---|---|

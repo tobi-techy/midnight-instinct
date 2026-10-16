@@ -1,0 +1,94 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1400" height="760" viewBox="0 0 1400 760" font-family="'Space Grotesk','Inter','Helvetica Neue',Arial,sans-serif">
+  <defs>
+    <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#1E1B5E"/>
+    </marker>
+    <marker id="r" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#C2410C"/>
+    </marker>
+  </defs>
+  <rect width="1400" height="760" fill="#F7F7FA"/>
+
+  <!-- title -->
+  <text x="60" y="70" font-size="34" font-weight="700" fill="#14123A">How Seal keeps a secret and still proves it</text>
+  <text x="60" y="104" font-size="18" fill="#5B5A78">Plaintext never leaves your device. Midnight only ever sees commitments, nullifiers and the one fact you chose to disclose.</text>
+
+  <!-- private zone -->
+  <rect x="40" y="140" width="800" height="400" rx="28" fill="#ECEBF6" stroke="#1E1B5E" stroke-width="2" stroke-dasharray="8 8"/>
+  <text x="70" y="178" font-size="15" font-weight="700" letter-spacing="2" fill="#1E1B5E">PRIVATE · ON YOUR DEVICE</text>
+
+  <!-- public zone -->
+  <rect x="930" y="140" width="430" height="400" rx="28" fill="#1E1B5E"/>
+  <text x="960" y="178" font-size="15" font-weight="700" letter-spacing="2" fill="#C9C7F2">PUBLIC · MIDNIGHT LEDGER</text>
+
+  <!-- You -->
+  <rect x="70" y="210" width="200" height="130" rx="22" fill="#FFFFFF" stroke="#1E1B5E" stroke-width="3"/>
+  <text x="170" y="258" text-anchor="middle" font-size="22" font-weight="700" fill="#14123A">You</text>
+  <text x="170" y="288" text-anchor="middle" font-size="16" fill="#5B5A78">text Seal on</text>
+  <text x="170" y="310" text-anchor="middle" font-size="16" fill="#5B5A78">iMessage</text>
+
+  <!-- Agent -->
+  <rect x="330" y="210" width="240" height="300" rx="22" fill="#FFFFFF" stroke="#1E1B5E" stroke-width="3"/>
+  <text x="450" y="252" text-anchor="middle" font-size="22" font-weight="700" fill="#14123A">Seal agent</text>
+  <line x1="360" y1="270" x2="540" y2="270" stroke="#E2E1EF" stroke-width="2"/>
+  <text x="360" y="304" font-size="16" fill="#14123A">• your memory text</text>
+  <text x="360" y="334" font-size="16" fill="#14123A">• owner secret (witness)</text>
+  <text x="360" y="364" font-size="16" fill="#14123A">• 32-byte salt</text>
+  <text x="360" y="394" font-size="16" fill="#14123A">• policy engine</text>
+  <rect x="360" y="420" width="180" height="62" rx="14" fill="#FFF4EC" stroke="#C2410C" stroke-width="2"/>
+  <text x="450" y="447" text-anchor="middle" font-size="15" font-weight="700" fill="#C2410C">Spend gate</text>
+  <text x="450" y="468" text-anchor="middle" font-size="13" fill="#C2410C">fails closed</text>
+
+  <!-- Proof server -->
+  <rect x="600" y="210" width="210" height="130" rx="22" fill="#FFFFFF" stroke="#1E1B5E" stroke-width="3"/>
+  <text x="705" y="256" text-anchor="middle" font-size="22" font-weight="700" fill="#14123A">Proof server</text>
+  <text x="705" y="286" text-anchor="middle" font-size="16" fill="#5B5A78">builds the ZK proof</text>
+  <text x="705" y="308" text-anchor="middle" font-size="16" fill="#5B5A78">locally</text>
+
+  <!-- Ledger contents -->
+  <rect x="960" y="210" width="370" height="190" rx="20" fill="#2A2775"/>
+  <text x="985" y="246" font-size="20" font-weight="700" fill="#FFFFFF">memory-vault.compact</text>
+  <text x="985" y="278" font-size="16" fill="#DAD9F7">• commitments + owner bindings</text>
+  <text x="985" y="304" font-size="16" fill="#DAD9F7">• hidden category commitments</text>
+  <text x="985" y="330" font-size="16" fill="#DAD9F7">• attestations (category code only)</text>
+  <text x="985" y="356" font-size="16" fill="#DAD9F7">• nullifiers (no replay)</text>
+  <text x="985" y="382" font-size="16" fill="#DAD9F7">• revoked flags</text>
+  <rect x="960" y="415" width="370" height="100" rx="20" fill="#2A2775"/>
+  <text x="985" y="450" font-size="20" font-weight="700" fill="#FFFFFF">allowance-registry.compact</text>
+  <text x="985" y="480" font-size="16" fill="#DAD9F7">• owner-bound limits, running total</text>
+  <text x="985" y="502" font-size="16" fill="#DAD9F7">• circuit rejects any overspend</text>
+
+  <!-- arrows -->
+  <line x1="272" y1="275" x2="326" y2="275" stroke="#1E1B5E" stroke-width="3" marker-end="url(#a)"/>
+  <line x1="572" y1="275" x2="596" y2="275" stroke="#1E1B5E" stroke-width="3" marker-end="url(#a)"/>
+  <line x1="812" y1="275" x2="924" y2="275" stroke="#1E1B5E" stroke-width="3" marker-end="url(#a)"/>
+  <text x="885" y="262" text-anchor="middle" font-size="13" font-weight="700" fill="#1E1B5E">proof + tx</text>
+  <path d="M542,451 C720,451 800,470 956,468" fill="none" stroke="#C2410C" stroke-width="3" stroke-dasharray="7 6" marker-end="url(#r)"/>
+  <text x="760" y="446" text-anchor="middle" font-size="13" font-weight="700" fill="#C2410C">check allowance first</text>
+
+  <!-- verifier -->
+  <rect x="960" y="590" width="370" height="110" rx="22" fill="#FFFFFF" stroke="#1E1B5E" stroke-width="3"/>
+  <text x="1145" y="630" text-anchor="middle" font-size="22" font-weight="700" fill="#14123A">Anyone can verify</text>
+  <text x="1145" y="660" text-anchor="middle" font-size="16" fill="#5B5A78">reads the ledger only</text>
+  <text x="1145" y="682" text-anchor="middle" font-size="16" fill="#5B5A78">no wallet, no seed, no trust in Seal</text>
+  <line x1="1145" y1="586" x2="1145" y2="546" stroke="#1E1B5E" stroke-width="3" marker-end="url(#a)"/>
+
+  <!-- steps legend -->
+  <g font-size="16">
+    <circle cx="80" cy="610" r="18" fill="#1E1B5E"/><text x="80" y="616" text-anchor="middle" fill="#FFF" font-weight="700">1</text>
+    <text x="110" y="605" font-weight="700" fill="#14123A">Commit</text>
+    <text x="110" y="627" fill="#5B5A78">memory stays local, hash anchored</text>
+
+    <circle cx="450" cy="610" r="18" fill="#1E1B5E"/><text x="450" y="616" text-anchor="middle" fill="#FFF" font-weight="700">2</text>
+    <text x="480" y="605" font-weight="700" fill="#14123A">Prove</text>
+    <text x="480" y="627" fill="#5B5A78">disclose one category, burn a nullifier</text>
+
+    <circle cx="80" cy="680" r="18" fill="#1E1B5E"/><text x="80" y="686" text-anchor="middle" fill="#FFF" font-weight="700">3</text>
+    <text x="110" y="675" font-weight="700" fill="#14123A">Verify</text>
+    <text x="110" y="697" fill="#5B5A78">anyone checks it against the ledger</text>
+
+    <circle cx="450" cy="680" r="18" fill="#C2410C"/><text x="450" y="686" text-anchor="middle" fill="#FFF" font-weight="700">4</text>
+    <text x="480" y="675" font-weight="700" fill="#14123A">Spend</text>
+    <text x="480" y="697" fill="#5B5A78">a circuit caps what the agent can pay</text>
+  </g>
+</svg>
