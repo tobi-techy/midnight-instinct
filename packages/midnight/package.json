@@ -2,7 +2,7 @@
   "name": "@open-instinct/midnight",
   "version": "0.1.0",
   "description": "Midnight privacy layer for Open Instinct: shielded memory vault, selective-disclosure proofs, ZK-gated allowances",
-  "license": "MIT",
+  "license": "Apache-2.0",
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",

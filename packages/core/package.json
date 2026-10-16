@@ -2,7 +2,7 @@
   "name": "@open-instinct/core",
   "version": "0.1.0",
   "description": "Open Instinct agent runtime: Pi agent loop, prompt builder, policy engine, memory, scheduler, audit, shared types",
-  "license": "MIT",
+  "license": "Apache-2.0",
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",

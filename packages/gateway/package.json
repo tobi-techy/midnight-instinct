@@ -2,7 +2,7 @@
   "name": "@open-instinct/gateway",
   "version": "0.1.0",
   "description": "Open Instinct gateway: multi-user relay from Inkbox webhooks to Maritime-hosted agents, plus signup and connect pages",
-  "license": "MIT",
+  "license": "Apache-2.0",
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",

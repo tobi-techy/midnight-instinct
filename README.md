@@ -207,9 +207,10 @@ Merit Systems publishes an unrelated project called [OpenInstinct](https://githu
 
 ## License
 
-The base project, Open Instinct, is MIT (see [LICENSE](LICENSE)), copyright Maria Gorskikh and
-contributors. The Midnight layer added for the buildathon — `contracts/`, `packages/midnight/`
-and `deploy/midnight-devnet/` — is Apache 2.0, as the buildathon requires; see the LICENSE file
-in each of those directories.
+Apache License 2.0, see [LICENSE](LICENSE).
+
+The base project this fork builds on, Open Instinct by Maria Gorskikh and contributors, is MIT
+licensed. That notice is preserved in [LICENSE-MIT](LICENSE-MIT) so the upstream terms travel
+with the code they cover.
 
 [Contributing](CONTRIBUTING.md)

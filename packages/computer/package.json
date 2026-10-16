@@ -2,7 +2,7 @@
   "name": "@open-instinct/computer",
   "version": "0.1.0",
   "description": "Desktop tools for Open Instinct: Maritime desktopd (in-VM) or hosted Maritime Computers MCP",
-  "license": "MIT",
+  "license": "Apache-2.0",
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",

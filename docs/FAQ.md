@@ -11,7 +11,7 @@ Short answers to the questions people ask first. Longer explanations live in
 Instinct is a closed, invite-only product by Spear Street Technology. You cannot read its
 code, pick its model or see its permission rules. Open Instinct keeps the same shape (a
 phone number, its own computer, a trusted network of other agents) and opens the box. The
-code is MIT. The model is yours to choose. The tier table is a JSON file with tests. Memory
+code is Apache 2.0. The model is yours to choose. The tier table is a JSON file with tests. Memory
 is Markdown you can read. Every side effect is in an audit log. Background on Instinct:
 [research/INSTINCT.md](research/INSTINCT.md).
 

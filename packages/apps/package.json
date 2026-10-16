@@ -2,7 +2,7 @@
   "name": "@open-instinct/apps",
   "version": "0.1.0",
   "description": "App tools for Open Instinct through the Composio Tool Router (Gmail, Calendar, and 1000+ toolkits)",
-  "license": "MIT",
+  "license": "Apache-2.0",
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",

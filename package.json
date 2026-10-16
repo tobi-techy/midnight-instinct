@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "description": "Open-source Instinct: a personal agent you text on iMessage, with its own computer and a trusted network of other agents. Built on Pi, Inkbox, Maritime and Composio.",
-  "license": "MIT",
+  "license": "Apache-2.0",
   "type": "module",
   "engines": {
     "node": ">=22.19.0"

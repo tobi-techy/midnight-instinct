@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "description": "Local Midnight devnet + real deploy harness for the Open Instinct private agent",
-  "license": "MIT",
+  "license": "Apache-2.0",
   "scripts": {
     "compile": "compact compile ../../contracts/memory-vault.compact contracts/managed/memory-vault && compact compile ../../contracts/allowance-registry.compact contracts/managed/allowance-registry",
     "build": "tsc --noEmit || true",
