@@ -68,6 +68,15 @@ const ADAPTER_ORIGINS = [`http://127.0.0.1:${PORT}`, `http://localhost:${PORT}`]
 
 const hexToBytes = (h: string): Uint8Array => Uint8Array.from(Buffer.from(h.replace(/^0x/, ''), 'hex'));
 const bytesToHex = (u8: Uint8Array): string => Buffer.from(u8).toString('hex');
+/**
+ * Allowance keys are `Bytes<32>`. A short or non-hex string would otherwise be
+ * truncated by the buffer decoder and reach the circuit as an opaque
+ * "expected value of type Bytes<32>" error, so reject it here instead.
+ */
+const keyBytes = (raw: unknown): Uint8Array | undefined => {
+  const hex = String(raw ?? '').replace(/^0x/, '').trim().toLowerCase();
+  return /^[0-9a-f]{64}$/.test(hex) ? hexToBytes(hex) : undefined;
+};
 
 async function loadModule(dir: string): Promise<{ Contract: unknown; ledger: (s: unknown) => unknown }> {
   return (await import(pathToFileURL(path.join(dir, 'contract', 'index.js')).href)) as {
@@ -318,14 +327,18 @@ async function main(): Promise<void> {
         }
         case '/allowance/authorize': {
           if (!allowance) return send(res, 503, { error: 'allowance contract not deployed' });
+          const key = keyBytes(body.key);
+          if (!key) return send(res, 400, { error: 'key must be 32 bytes as 64 hex chars' });
           const call = await (allowance as never as { callTx: Record<string, (...a: unknown[]) => Promise<{ public: { txId: string } }>> }).callTx
-            .authorize(hexToBytes(String(body.key)), BigInt(Number(body.maxAmount)));
+            .authorize(key, BigInt(Number(body.maxAmount)));
           return send(res, 200, { txHash: call.public.txId });
         }
         case '/allowance/spend': {
           if (!allowance) return send(res, 503, { error: 'allowance contract not deployed' });
+          const key = keyBytes(body.key);
+          if (!key) return send(res, 400, { error: 'key must be 32 bytes as 64 hex chars' });
           const call = await (allowance as never as { callTx: Record<string, (...a: unknown[]) => Promise<{ public: { txId: string } }>> }).callTx
-            .spend(hexToBytes(String(body.key)), BigInt(Number(body.amount)));
+            .spend(key, BigInt(Number(body.amount)));
           return send(res, 200, { txHash: call.public.txId });
         }
         case '/allowance/check': {
@@ -333,8 +346,10 @@ async function main(): Promise<void> {
         }
         case '/allowance/revoke': {
           if (!allowance) return send(res, 503, { error: 'allowance contract not deployed' });
+          const key = keyBytes(body.key);
+          if (!key) return send(res, 400, { error: 'key must be 32 bytes as 64 hex chars' });
           const call = await (allowance as never as { callTx: Record<string, (...a: unknown[]) => Promise<{ public: { txId: string } }>> }).callTx
-            .revoke(hexToBytes(String(body.key)));
+            .revoke(key);
           return send(res, 200, { txHash: call.public.txId });
         }
         case '/verify': {

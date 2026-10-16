@@ -1,4 +1,92 @@
-<p align="center"><img src="docs/assets/brand/wordmark.png" alt="Open Instinct" width="620"></p>
+<p align="center"><img src="docs/assets/brand/seal-wordmark.svg" alt="Seal" width="560"></p>
+
+<p align="center"><b>Seal</b> is a privacy-first personal agent. You text it. It remembers for you, and it can prove
+things about those memories on <a href="https://midnight.network/">Midnight</a> without ever revealing them.</p>
+
+<p align="center">Built for the <b>Akindo Wave Hacks buildathon</b> (Midnight track) on top of
+<a href="https://github.com/mariagorskikh/open-instinct">Open Instinct</a>.<br>
+Submission brief: <a href="docs/SUBMISSION.md">docs/SUBMISSION.md</a>.</p>
+
+## What Seal adds to Open Instinct
+
+The base project is a real personal agent you text on iMessage. This fork gives it a
+shielded memory vault and a spend limit that a circuit enforces.
+
+| New here | Where |
+|---|---|
+| `memory-vault` and `allowance-registry`, two Compact contracts | `contracts/` |
+| The agent's Midnight client, tools and private state | `packages/midnight/` |
+| Verifier path: `POST /verify`, `GET /verify/<id>`, `instinct midnight verify` | `deploy/midnight-devnet/`, `packages/cli` |
+| Allowance gate checked before every gated action, failing closed | `packages/core/src/runtime.ts`, `packages/server/` |
+| The Preprod sync fix: one dropped indexer socket used to be fatal | `deploy/midnight-devnet/scripts/patch-wallet-sdk.mjs` |
+
+Commits: `d727522` (vault), `99d2172` (verifier and gate), `8d6a61f` (sync fix), `88ceffe` (model gateway).
+Full authorship and evidence: [docs/SUBMISSION.md](docs/SUBMISSION.md).
+
+## Two ledgers
+
+The whole design is a split between what the world can read and what stays on your machine.
+
+| Public (Midnight, Preprod) | Private (your host) |
+|---|---|
+| 32-byte commitments to each memory | the memory text itself, in `MEMORY.md` |
+| category attestations, one code per proof | the plain category code, until the owner attests it |
+| single-use nullifiers | the owner secret and salts |
+| allowance limits, spends and revocations | which purchase a spend was for |
+
+A verifier learns one bit of meaning (the category you chose to disclose) and that the
+proof has not been used before. It learns nothing else, and needs no wallet, no seed and no
+cooperation from the agent.
+
+## Judge path
+
+Deployed and exercised on Preprod (public testnet) on 2026-10-16:
+
+| Contract | Address |
+|---|---|
+| `memory-vault` | `6e9d608a997d5642564cbaea2b0a93a45fae0b806ee5fb68e8e0b008c2f19f7f` |
+| `allowance-registry` | `fd4bfac0d1ae522793050401ee9021bc7dfe27767745f5a3e954d15895d4afb1` |
+
+Three commands, no keys and no wallet, straight from a fresh clone:
+
+```bash
+pnpm install && pnpm build
+node examples/midnight-demo.mjs                 # commit, prove, verify offline: deterministic, no chain
+pnpm --filter @open-instinct/midnight run test  # the layer's own suite
+```
+
+To verify the real Preprod attestation, run the read-only adapter against Preprod and ask it:
+
+```bash
+cd deploy/midnight-devnet && npm run adapter -- --network preprod   # needs BLOCKFROST_PROJECT_ID
+instinct midnight verify c91ebd08d0010b1a1aac921345ba5fe69354b87e910d346dd753573e7d352145
+```
+
+```
+Verified — valid health proof (single-use, cannot be replayed)
+  disclosed: health (code 1)
+  single-use: yes (cannot be replayed)
+  public URL: http://127.0.0.1:6400/verify/c91ebd08d0010b1a1aac921345ba5fe69354b87e910d346dd753573e7d352145
+```
+
+An unknown id returns `valid: false` and a malformed one is rejected with a reason, so this is
+not a function that returns true. The allowance side refuses too: after `$20` of a `$50`
+allowance was spent, a further `$40` came back `failed assert: over allowance`, refused by the
+circuit rather than by the agent's code. Both transcripts are in
+[SUBMISSION.md](docs/SUBMISSION.md).
+
+## How this differs from a budget-proving agent
+
+A budget agent proves one thing: that a number stayed under another number. Seal keeps the
+agent's **whole memory** private, proves facts about any of it on demand, and gates spending
+with the same machinery.
+
+---
+
+## The base project: Open Instinct
+
+What follows documents the agent this fork builds on. It is the work of Maria Gorskikh and
+contributors, and it runs unchanged unless you switch the Midnight layer on.
 
 <p align="center">An open-source personal agent you text. It has its own computer, does real tasks, and coordinates with the agents of the people you trust.<br>A from-scratch, documented clone of <a href="docs/research/INSTINCT.md">Instinct</a>, built so anyone can run one.</p>
 
@@ -40,7 +128,7 @@ cd deploy/midnight-devnet && npm run setup   # real local devnet deploy + commit
 
 Both contracts (`memory-vault`, `allowance-registry`) compile with `compact compile` 0.31.1 and use the platform's `persistentCommit`/`disclose` idioms.
 
-Three modes: `mock` (offline, deterministic, the default), `local` (midnight-local-dev), and `testnet` (real transactions with explorer links). The layer is off unless `MIDNIGHT_MODE` is set, so enabling it never changes a normal boot. Details: [MIDNIGHT.md](docs/MIDNIGHT.md) and [ARCH-MIDNIGHT.md](docs/ARCH-MIDNIGHT.md).
+Three modes: `mock` (offline, deterministic, the default), `local` (midnight-local-dev), and `testnet` (real transactions). The layer is off unless `MIDNIGHT_MODE` is set, so enabling it never changes a normal boot. Details: [MIDNIGHT.md](docs/MIDNIGHT.md) and [ARCH-MIDNIGHT.md](docs/ARCH-MIDNIGHT.md).
 
 ## Quick start
 
@@ -49,7 +137,7 @@ Node 22.19+ and pnpm 10. You bring your own keys; [KEYS.md](docs/KEYS.md) lists 
 **On your laptop, no phone number yet**
 
 ```bash
-git clone https://github.com/mariagorskikh/open-instinct && cd open-instinct
+git clone https://github.com/tobi-techy/midnight-instinct && cd midnight-instinct
 nvm use && corepack enable        # if corepack needs permissions: npm install -g pnpm@10
 pnpm install && pnpm build
 export ANTHROPIC_API_KEY=sk-ant-...
@@ -106,8 +194,15 @@ docs/               architecture, permissions, protocol, keys, deploy, research
 
 ## Status
 
-Version 0.1. Nine packages, 837 tests, a scripted end-to-end smoke test, and a cold-start test from a fresh clone. Live iMessage and Maritime deployment were exercised against real identities during development; treat them as beta. Logins, 2FA and payments go to you through a desktop takeover or a Link approval, never to the model alone.
+The base is version 0.1: nine packages, an end-to-end smoke test and a cold-start test from a fresh clone. This fork adds the Midnight layer and stands at **962 tests across 10 packages**, plus 13 Compact-runtime simulator tests. Both contracts are live on Preprod. Live iMessage and Maritime deployment were exercised against real identities during development; treat them as beta.
 
 Merit Systems publishes an unrelated project called [OpenInstinct](https://github.com/Merit-Systems/OpenInstinct). This project is not affiliated with it or with Instinct.
 
-[Contributing](CONTRIBUTING.md) · MIT license
+## License
+
+The base project, Open Instinct, is MIT (see [LICENSE](LICENSE)), copyright Maria Gorskikh and
+contributors. The Midnight layer added for the buildathon — `contracts/`, `packages/midnight/`
+and `deploy/midnight-devnet/` — is Apache 2.0, as the buildathon requires; see the LICENSE file
+in each of those directories.
+
+[Contributing](CONTRIBUTING.md)

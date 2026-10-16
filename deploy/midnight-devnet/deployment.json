@@ -1,21 +1,21 @@
 {
   "version": 1,
-  "network": "undeployed",
-  "deployedAt": "2026-10-14T03:23:33.156Z",
-  "deployer": "mn_addr_undeployed1h3ssm5ru2t6eqy4g3she78zlxn96e36ms6pq996aduvmateh9p9sk96u7s",
+  "network": "preprod",
+  "deployedAt": "2026-10-16T03:57:51.819Z",
+  "deployer": "mn_addr_preprod160ldgg3g3355nsahwumlc6nn3f4cukete4qwtttdue5wtfs08ejskx7ly5",
   "memoryVault": {
-    "address": "ce6bc7a4c0573135c7f6a866855a772a8eb34731cabf6e285b2b36e52f543581",
-    "deployTx": "004010e6ff0b1af5cac66d53c01233af4e18cc4934533ae407541095897244b8bf",
-    "deployBlock": 7,
-    "commitTx": "00fc8645113066042739b55227e2f6471c139fb016f39ecdf00a3d5ddf90904f8c",
-    "commitBlock": 10,
-    "commitment": "0c9df86e50592c5caea4d3a0d93f5bd417dfb4ce22c576562d4e1f2b213b5068",
-    "attestTx": "00805849a51f9ef35064c5242a9019420696fe9aeaa3c5195c6703f350e86d1dc1",
-    "attestBlock": 13,
-    "attestationId": "a0e38cbcd2a347c6bd6b09f63ecc61bd54e8ddb101428b3ce05f4c31cc72acc4"
+    "address": "6e9d608a997d5642564cbaea2b0a93a45fae0b806ee5fb68e8e0b008c2f19f7f",
+    "deployTx": "0028e4d6dacd6ea9e5479fae694595b41436ab184bd7ba3744b65716d01e0f4fbf",
+    "deployBlock": 3000850,
+    "commitTx": "0074e67894ca214156ea922b2269c2a7ce42ddac8e7764ba22a13795d0ec9abe14",
+    "commitBlock": 3000856,
+    "commitment": "1443be15786d3ea083d668070d79ed3879399a710a81db624b564569329a6ac1",
+    "attestTx": "0018f9a0486ddc5ecf924e0e7f1c33115d63433b9549b97d4a82b8ec264c78ecb2",
+    "attestBlock": 3000862,
+    "attestationId": "c91ebd08d0010b1a1aac921345ba5fe69354b87e910d346dd753573e7d352145"
   },
   "allowanceRegistry": {
-    "address": "20547f21a3772c8a8b634104f4e79af8b0c8067b37f2f2502af38a560187cff3",
-    "deployTx": "0076dd30d83993d4c2bfbffa81eba4330f9fc85ab43444fa0cf8d03460842ab123"
+    "address": "fd4bfac0d1ae522793050401ee9021bc7dfe27767745f5a3e954d15895d4afb1",
+    "deployTx": "000327ea4e2c05c81b3f0eae1df6b0b06634da3ae62ef94a8786d9b237da728a93"
   }
 }
