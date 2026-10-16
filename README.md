@@ -1,4 +1,4 @@
-<p align="center"><img src="docs/assets/brand/seal-wordmark.svg" alt="Seal" width="560"></p>
+<p align="center"><img src="docs/assets/brand/seal-logo.jpeg" alt="Seal" width="520"></p>
 
 <p align="center"><b>Seal</b> is a privacy-first personal agent. You text it. It remembers for you, and it can prove
 things about those memories on <a href="https://midnight.network/">Midnight</a> without ever revealing them.</p>
