@@ -241,6 +241,53 @@ function blankRecord(input: ProvisionInput, id: string): UserRecord {
   return rec;
 }
 
+/** An identity that already exists in Inkbox, handed to the gateway so it can relay for it. */
+export interface AdoptIdentity {
+  /** Stable record id. Defaults to a fresh usr_ id. */
+  id?: string;
+  name: string;
+  phone: string;
+  email?: string;
+  handle: string;
+  identityId: string;
+  identityApiKey: string;
+  /** The identity's webhook signing key. Omit only when provisioning may fetch or rotate it. */
+  signingKey?: string;
+}
+
+/**
+ * Seed records for identities the operator already owns. This is how an agent
+ * that predates the gateway joins it: the record carries the identity, so
+ * provisionUser sees identityId, identityApiKey and signingKey already set and
+ * skips creating or rotating anything. Only the pieces that are genuinely
+ * missing run: the webhook subscription, then the Maritime agent.
+ *
+ * Records are written as `provisioning` so resumePending() finishes them on
+ * boot, and an existing record for the same id or handle is never overwritten.
+ */
+export function seedAdopted(store: UserStore, adopt: AdoptIdentity[], now: string = new Date().toISOString()): number {
+  let created = 0;
+  for (const entry of adopt) {
+    const existing = (entry.id ? store.get(entry.id) : undefined) ?? store.byHandle(entry.handle);
+    if (existing) continue;
+    const record: UserRecord = {
+      id: entry.id ?? newUserId(),
+      name: entry.name,
+      phone: entry.phone,
+      handle: entry.handle,
+      identityId: entry.identityId,
+      identityApiKey: entry.identityApiKey,
+      signingKey: entry.signingKey ?? "",
+      createdAt: now,
+      status: "provisioning",
+    };
+    if (entry.email) record.email = entry.email;
+    store.save(record);
+    created++;
+  }
+  return created;
+}
+
 /**
  * Provision one person end to end. Completed steps are recorded before moving
  * on, so retries reuse the resources already saved for this person.

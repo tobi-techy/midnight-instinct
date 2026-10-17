@@ -1,6 +1,6 @@
 import { InkboxProvisioner } from "@open-instinct/inkbox";
 import { consoleLogger } from "./logger.js";
-import type { LinkPassthrough } from "./provision.js";
+import { type AdoptIdentity, type LinkPassthrough, seedAdopted } from "./provision.js";
 import { type GatewayServer, createGateway } from "./server.js";
 import { UserStore } from "./store.js";
 
@@ -27,10 +27,66 @@ export interface GatewayEnv {
   useMaritimeLlm: boolean;
   maritimeModel?: string;
   link?: LinkPassthrough;
+  /** Identities that already exist in Inkbox. The gateway relays for them without signup. */
+  adopt: AdoptIdentity[];
+  /** Extra env for every agent this gateway creates, e.g. INSTINCT_MODEL and LLM_API_KEY. */
+  agentEnv?: Record<string, string>;
 }
 
 function truthy(v: string | undefined): boolean {
   return v !== undefined && /^(1|true|yes)$/i.test(v.trim());
+}
+
+function requireString(entry: Record<string, unknown>, key: string, where: string): string {
+  const v = entry[key];
+  if (typeof v !== "string" || !v.trim()) throw new Error(`${where}.${key} is required`);
+  return v;
+}
+
+/** GATEWAY_ADOPT: a JSON array of identities the operator already owns (see AdoptIdentity). */
+export function parseAdopt(raw: string | undefined): AdoptIdentity[] {
+  if (!raw || !raw.trim()) return [];
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    throw new Error("GATEWAY_ADOPT must be a JSON array");
+  }
+  if (!Array.isArray(parsed)) throw new Error("GATEWAY_ADOPT must be a JSON array");
+  return parsed.map((entry, i) => {
+    const where = `GATEWAY_ADOPT[${i}]`;
+    if (!entry || typeof entry !== "object" || Array.isArray(entry)) throw new Error(`${where} must be an object`);
+    const o = entry as Record<string, unknown>;
+    const out: AdoptIdentity = {
+      name: requireString(o, "name", where),
+      phone: requireString(o, "phone", where),
+      handle: requireString(o, "handle", where).replace(/^@/, ""),
+      identityId: requireString(o, "identityId", where),
+      identityApiKey: requireString(o, "identityApiKey", where),
+    };
+    if (typeof o["email"] === "string" && o["email"]) out.email = o["email"];
+    if (typeof o["signingKey"] === "string" && o["signingKey"]) out.signingKey = o["signingKey"];
+    if (typeof o["id"] === "string" && o["id"]) out.id = o["id"];
+    return out;
+  });
+}
+
+/** GATEWAY_AGENT_ENV: a JSON object of extra env for every agent this gateway creates. */
+export function parseAgentEnv(raw: string | undefined): Record<string, string> | undefined {
+  if (!raw || !raw.trim()) return undefined;
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    throw new Error("GATEWAY_AGENT_ENV must be a JSON object");
+  }
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) throw new Error("GATEWAY_AGENT_ENV must be a JSON object");
+  const out: Record<string, string> = {};
+  for (const [key, value] of Object.entries(parsed as Record<string, unknown>)) {
+    if (typeof value !== "string") throw new Error(`GATEWAY_AGENT_ENV.${key} must be a string`);
+    out[key] = value;
+  }
+  return Object.keys(out).length > 0 ? out : undefined;
 }
 
 /** The only place the gateway reads process.env. Everything else takes options. */
@@ -67,6 +123,8 @@ export function readEnv(env: NodeJS.ProcessEnv): GatewayEnv {
     useMaritimeLlm: truthy(env["INSTINCT_USE_MARITIME_LLM"]),
     maritimeModel: env["INSTINCT_MARITIME_MODEL"] || undefined,
     link,
+    adopt: parseAdopt(env["GATEWAY_ADOPT"]),
+    agentEnv: parseAgentEnv(env["GATEWAY_AGENT_ENV"]),
   };
 }
 
@@ -98,6 +156,10 @@ export function startGateway(cfg: GatewayEnv): GatewayServer {
   }
 
   const store = new UserStore(cfg.dataDir);
+  // Records for identities that already exist. Seeded before listen so the
+  // resume pass on boot finishes them: webhooks, then the Maritime agent.
+  const adopted = seedAdopted(store, cfg.adopt);
+  if (adopted > 0) log.info("gateway.adopted", { count: adopted });
   const inkbox = cfg.inkboxAdminApiKey
     ? new InkboxProvisioner({ adminApiKey: cfg.inkboxAdminApiKey, baseUrl: cfg.inkboxBaseUrl })
     : undefined;
@@ -116,6 +178,7 @@ export function startGateway(cfg: GatewayEnv): GatewayServer {
       idleTtlSeconds: cfg.idleTtlSeconds,
       useMaritimeLlm: cfg.useMaritimeLlm,
       maritimeModel: cfg.maritimeModel,
+      ...(cfg.agentEnv ? { extraEnv: cfg.agentEnv } : {}),
     },
     signupSecret: cfg.signupSecret,
     anthropicApiKey: cfg.anthropicApiKey,

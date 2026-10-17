@@ -1,0 +1,67 @@
+# Root Dockerfile: the same agent image as deploy/Dockerfile.agent.
+#
+# Maritime's "GitHub repository" agent source builds the image itself and looks
+# for a Dockerfile at the repository root. This file is that entry point. Keep
+# the two copies in step by editing deploy/Dockerfile.agent first, then copying
+# it here: the only difference is this note, because every path below is
+# relative to the build context, which is the repository root either way.
+# Open Instinct agent image. One container = one person's agent.
+# Satisfies the Maritime BYO contract: 0.0.0.0:$PORT, GET /health, POST /chat, /data, python3 on PATH.
+#
+# Port: the image sets no PORT. Maritime injects PORT=18789 for framework "custom" (8080 is
+# reserved inside the VM); docker-compose sets PORT=8080 explicitly;
+# the server itself falls back to 8080 for a bare local run. EXPOSE and HEALTHCHECK follow $PORT.
+#
+# User: the process runs as the unprivileged `instinct` user. The entrypoint starts as root only
+# long enough to make /data writable by that user (Maritime mounts it root-owned) and then drops
+# privileges with setpriv. The owner's bash tool therefore runs as `instinct`, not root.
+FROM node:22-slim AS base
+ENV PNPM_HOME=/pnpm
+ENV PATH=$PNPM_HOME:$PATH
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends python3 ca-certificates curl git util-linux \
+  && rm -rf /var/lib/apt/lists/* \
+  && corepack enable \
+  && python3 --version \
+  && setpriv --version
+WORKDIR /app
+
+# Manifests first so dependency layers cache across source changes.
+FROM base AS deps
+COPY package.json pnpm-workspace.yaml pnpm-lock.yaml .npmrc tsconfig.base.json ./
+COPY packages/core/package.json packages/core/
+COPY packages/midnight/package.json packages/midnight/
+COPY packages/inkbox/package.json packages/inkbox/
+COPY packages/computer/package.json packages/computer/
+COPY packages/apps/package.json packages/apps/
+COPY packages/network/package.json packages/network/
+COPY packages/payments/package.json packages/payments/
+COPY packages/server/package.json packages/server/
+COPY packages/gateway/package.json packages/gateway/
+COPY packages/cli/package.json packages/cli/
+RUN pnpm install --frozen-lockfile
+
+FROM deps AS build
+COPY packages ./packages
+COPY skills ./skills
+RUN pnpm -r --filter './packages/*' run build \
+  && (pnpm prune --prod || echo "prune skipped; keeping dev deps")
+
+FROM base AS runtime
+ENV NODE_ENV=production \
+    INSTINCT_DATA_DIR=/data \
+    INSTINCT_SKILLS_DIR=/app/skills
+RUN groupadd --system instinct \
+  && useradd --system --gid instinct --uid 10001 --create-home --home-dir /home/instinct --shell /usr/sbin/nologin instinct \
+  && mkdir -p /data \
+  && chown instinct:instinct /data \
+  && chmod 0750 /data
+COPY --from=build --chown=instinct:instinct /app /app
+COPY --chown=instinct:instinct deploy/entrypoint.sh /app/deploy/entrypoint.sh
+RUN chmod 0755 /app/deploy/entrypoint.sh
+VOLUME ["/data"]
+# Documentation only: the real port is $PORT at runtime (see the note at the top).
+EXPOSE 8080
+HEALTHCHECK --interval=30s --timeout=5s --start-period=20s CMD curl -fsS "http://127.0.0.1:${PORT:-8080}/health" || exit 1
+ENTRYPOINT ["/app/deploy/entrypoint.sh"]
+CMD ["node", "packages/server/dist/main.js"]
