@@ -90,6 +90,37 @@ with the same machinery.
 
 ---
 
+## What is new in this fork
+
+This fork is judged on work that is new to it, so here is the line between the two, with the
+commit date for each piece. Everything below was written for the buildathon, after the base's
+last commit on 2026-10-05.
+
+| New in this fork | Path | First commit | Date |
+|---|---|---|---|
+| `memory-vault`: opaque commitments, category-only attestations, single-use nullifiers | `contracts/memory-vault.compact` | `83486c0` | 2026-10-09 |
+| `allowance-registry`: owner-bound spend limits enforced in-circuit | `contracts/allowance-registry.compact` | `2b180db` | 2026-10-10 |
+| The agent's Midnight client, private-state plumbing and tools | `packages/midnight/` | `83486c0` | 2026-10-09 |
+| Proof-server adapter: `/verify`, `/allowance/*`, the wallet console | `deploy/midnight-devnet/src/adapter.ts` | `83486c0` | 2026-10-09 |
+| Verifier path that needs no wallet: `instinct midnight verify <id>` | `packages/cli/src/commands/midnight.ts` | `99d2172` | 2026-10-14 |
+| Allowance gate: the circuit, plus a fail-closed runtime check before every gated action | `packages/core/src/runtime.ts`, `packages/core/src/policy.ts` | `99d2172` | 2026-10-14 |
+| Preprod sync fix: reconnect, progress logging and checkpoints that make a 17-hour sync resumable | `deploy/midnight-devnet/scripts/patch-wallet-sdk.mjs` | `8d6a61f` | 2026-10-14 |
+| The LLM API gateway as a first-class model provider | `packages/core/src/model.ts` | `88ceffe` | 2026-10-15 |
+
+**From Open Instinct, unchanged.** The agent loop, the Inkbox identity and messaging layer, the
+six trust tiers, the gateway, the memory files, the skills, the CLI and the model plumbing are
+the work of Maria Gorskikh and contributors, merged through `a4df7ee` on 2026-10-05. This fork
+makes no claim to them.
+
+One honest note about iMessage: the channel itself arrives with the base's Inkbox layer. What is
+new here is the live `@sealai` identity, the self-hosted tunnel and webhook path, and operating
+it end to end.
+
+`docs/SUBMISSION.md` carries the same split in more detail, including what the fork changed
+inside shared files.
+
+---
+
 ## The base project: Open Instinct
 
 What follows documents the agent this fork builds on. It is the work of Maria Gorskikh and

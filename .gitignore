@@ -12,9 +12,12 @@ AGENTS.md
 .DS_Store
 coverage/
 .pnpm-store/
-contracts/build/
+# Compiled contract artifacts are committed on purpose: the buildathon requires
+# the contracts to compile, and a judge without the Compact toolchain must still
+# be able to read and run them. Regenerate with `pnpm run contracts:build`.
+!contracts/build/
 deploy/midnight-devnet/node_modules/
-deploy/midnight-devnet/contracts/managed/
+!deploy/midnight-devnet/contracts/managed/
 deploy/midnight-devnet/.midnight-state.json
 deploy/midnight-devnet/.midnight-seed.json
 deploy/midnight-devnet/.midnight-wallet-state/
