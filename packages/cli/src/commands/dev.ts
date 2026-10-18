@@ -5,6 +5,7 @@
  * the server's own main.ts so iMessage reaches a laptop.
  */
 import { loadConfig } from "@open-instinct/core";
+import { driveTunnel } from "@open-instinct/inkbox";
 import { parse, str, flag, type OptionSpec } from "../args.js";
 import type { CliContext } from "../context.js";
 import { readSecrets, applySecretsToEnv } from "../secrets.js";
@@ -73,6 +74,9 @@ const defaultConnectTunnel: TunnelConnector = async ({ apiKey, handle, baseUrl, 
     installSignalHandlers: false,
     onStatus: (status: unknown) => log(`tunnel ${String(status)}`),
   });
+  // connect() only builds the listener; the runtime must be driven or the tunnel
+  // reports a public URL without ever receiving anything.
+  driveTunnel(listener, (message) => log(`tunnel runtime stopped: ${message}`));
   return { publicUrl: listener.publicUrl, close: () => listener.close() };
 };
 

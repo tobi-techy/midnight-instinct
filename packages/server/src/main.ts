@@ -11,6 +11,7 @@
  */
 import type http from "node:http";
 import { Inkbox } from "@inkbox/sdk";
+import { driveTunnel } from "@open-instinct/inkbox";
 import { bindHostFor } from "./bind.js";
 import { boot } from "./boot.js";
 import { closeInkboxInbox, createHttpServer, listenTunnelServer } from "./http.js";
@@ -81,6 +82,10 @@ async function startTunnel(port: number, state: Awaited<ReturnType<typeof boot>>
     installSignalHandlers: false,
     onStatus: (status) => log(`tunnel ${status}`),
   });
+  // connect() only builds the listener. The runtime is dialled by serveForever(),
+  // and an undriven listener advertises a public URL while staying silent, so
+  // Inkbox deliveries are logged against the tunnel and never arrive.
+  driveTunnel(listener, (message) => log(`tunnel runtime stopped: ${message}`));
   log(`tunnel up: ${listener.publicUrl} (serves /health and /webhooks/inkbox only)`);
 
   if (env.INKBOX_ADMIN_API_KEY) {
