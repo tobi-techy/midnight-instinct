@@ -69,6 +69,31 @@ spend policy, otherwise ask · `no` denied.
 The table lives in `packages/core/src/policy.ts`. A test checks the rows with special values against
 this file, so change both together.
 
+## Public demo agents
+
+An agent deployed with `INSTINCT_AGENT_PUBLIC=1` is a demo surface: it is meant to answer anyone
+who messages it, so an unknown sender is a guest rather than a stranger. `config.agent.public`
+(seeded from that variable on first boot, like the other `INSTINCT_*` variables) opens three
+capabilities on the stranger row and raises the stranger rate limits. Nothing else moves.
+
+| Stranger row | private agent | public demo agent |
+|---|---|---|
+| `converse` | intro only | yes |
+| `owner.relay` | yes, 3/day | yes, 50/day |
+| `memory.write` | no | yes |
+| `web.read` | no | yes |
+| Stranger limits | 3 conversations a day, 10 messages each | 50 conversations a day, 40 messages each |
+
+Everything about the owner stays closed: `owner.profile.public`, `owner.profile.preferences`,
+location, calendar, mail, contacts, plans, spend, `computer.use`, `files.read`, `files.write`,
+`apps.use` and `network.*` are denied to a guest exactly as they are to a stranger. That is the
+point of a demo agent: a prompt injection into it must not reach the owner or the host it runs on.
+
+The prompt follows the policy: with `public` set, the identity layer says so and the principal
+layer describes the unknown sender as a guest to help rather than a stranger to turn away. Run a
+demo agent as its own identity and its own process, so guests share that agent and its memory and
+never the owner's.
+
 `web.read` and `apps.use` are transport capabilities. The specific capability on the same tool
 (`calendar.freebusy`, `email.send`, ...) does the real gating; these two only say who may use the
 transport at all. `web_fetch` fetches public hosts only: it resolves every hostname first and refuses

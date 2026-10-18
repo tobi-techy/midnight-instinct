@@ -331,6 +331,7 @@ Every variable below is read by the server or the CLI. `deploy/.env.example` lis
 | `INSTINCT_MODEL` | server | `provider/model`. Default `anthropic/claude-fable-5-1`. `openai-compatible/<id>` uses `OPENAI_BASE_URL` |
 | `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `OPENAI_BASE_URL` | server, CLI | model access |
 | `INSTINCT_OWNER_NAME`, `INSTINCT_OWNER_PHONE`, `INSTINCT_OWNER_EMAIL`, `INSTINCT_OWNER_TIMEZONE`, `INSTINCT_AGENT_NAME` | server | seed `config.json` on first boot. `init` flags do the same job |
+| `INSTINCT_AGENT_PUBLIC` | server | `1` makes this a demo agent that answers anyone who messages it: unknown senders become guests who may converse, remember and search the web, while everything about the owner stays closed. Seeds `config.agent.public` on first boot ([PERMISSIONS.md](PERMISSIONS.md)) |
 | `INKBOX_API_KEY`, `INKBOX_AGENT_HANDLE`, `INKBOX_IDENTITY_ID`, `INKBOX_SIGNING_KEY` | server, CLI | the identity-scoped Inkbox credentials. `init` saves them in `secrets/inkbox.json`; `dev` loads them |
 | `INKBOX_ADMIN_API_KEY` | CLI, server | org-wide key. Provisions identities, mints keys, creates invitations. Optional once an identity exists, whose own key can subscribe its webhooks and rotate its signing key |
 | `INKBOX_BASE_URL` | CLI, server | only for a self-hosted Inkbox |

@@ -102,13 +102,34 @@ export function defaultSpendPolicy(): SpendPolicy {
   };
 }
 
-export function defaultPolicy(): Policy {
+/**
+ * The stranger row a public demo agent starts from. A guest is an unknown sender who
+ * is here to try the agent out, so `converse` is a full conversation rather than the
+ * one-line introduction the default stranger row allows, and memory plus the public
+ * web are open. Everything that touches the owner stays closed, and so do the file,
+ * computer, mail, calendar and spend capabilities: a demo agent is a public surface,
+ * and a prompt injection on it must not reach the owner or the host.
+ */
+export const PUBLIC_GUEST_TIER: Partial<Record<Capability, Permission>> = {
+  converse: "yes",
+  "owner.relay": "yes",
+  "memory.write": "yes",
+  "web.read": "yes",
+};
+
+/**
+ * Rate limits for a public demo. The stranger defaults (3 conversations a day, 10
+ * messages each) are meant for one intruder, not for a room of people taking turns.
+ */
+export const PUBLIC_GUEST_LIMITS: Policy["strangerLimits"] = { conversationsPerDay: 50, messagesPerConversation: 40 };
+
+export function defaultPolicy(opts: { public?: boolean } = {}): Policy {
   return {
     version: 1,
-    tiers: {},
+    tiers: opts.public ? { stranger: { ...PUBLIC_GUEST_TIER } } : {},
     grants: [],
     spend: defaultSpendPolicy(),
-    strangerLimits: { conversationsPerDay: 3, messagesPerConversation: 10 },
+    strangerLimits: opts.public ? { ...PUBLIC_GUEST_LIMITS } : { conversationsPerDay: 3, messagesPerConversation: 10 },
   };
 }
 
@@ -358,12 +379,21 @@ export class PolicyEngine {
   }
 }
 
-export function loadPolicy(state: StateDir): Policy {
+/**
+ * policy.json over the defaults. `public` seeds the guest stranger row for a demo
+ * agent; a tier written in the file is merged over that row rather than replacing it,
+ * so editing one capability in the file does not silently drop the rest.
+ */
+export function loadPolicy(state: StateDir, opts: { public?: boolean } = {}): Policy {
   const raw = state.readJson<Partial<Policy>>(FILE, {});
-  const d = defaultPolicy();
+  const d = defaultPolicy(opts);
+  const tiers: Policy["tiers"] = { ...d.tiers };
+  for (const [tier, capabilities] of Object.entries(raw.tiers ?? {})) {
+    tiers[tier as Tier] = { ...(tiers[tier as Tier] ?? {}), ...(capabilities ?? {}) };
+  }
   return {
     version: 1,
-    tiers: raw.tiers ?? d.tiers,
+    tiers,
     grants: Array.isArray(raw.grants) ? raw.grants : d.grants,
     spend: { ...d.spend, ...(raw.spend ?? {}) },
     strangerLimits: { ...d.strangerLimits, ...(raw.strangerLimits ?? {}) },

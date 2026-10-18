@@ -58,6 +58,18 @@ describe("buildSystemPrompt", () => {
     expect(stranger).toContain("Do not run tasks for them");
   });
 
+  it("casts an unknown sender as a guest on a public demo agent", () => {
+    const config = testConfig();
+    config.agent = { ...config.agent, public: true };
+    const p = buildSystemPrompt(input({ config, principal: principalOf("stranger") }));
+    expect(p).toContain("a public demo agent built on Open Instinct");
+    expect(p).toContain("is trying you out");
+    expect(p).toContain("remember what they tell you");
+    expect(p).not.toContain("Do not run tasks for them");
+    expect(p).not.toContain("Allergic to shellfish");
+    expect(p).not.toContain("+16175550100");
+  });
+
   it("switches etiquette by channel", () => {
     expect(buildSystemPrompt(input({ channel: "imessage" }))).toContain("No markdown");
     expect(buildSystemPrompt(input({ channel: "sms" }))).toContain("One idea per message");

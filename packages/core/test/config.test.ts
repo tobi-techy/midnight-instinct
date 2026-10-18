@@ -67,6 +67,12 @@ describe("config", () => {
     expect(cfg.apps.toolkits).toEqual(DEFAULT_TOOLKITS);
   });
 
+  it("marks a public demo agent only when INSTINCT_AGENT_PUBLIC asks for one", () => {
+    for (const on of ["1", "true", "YES", "on"]) expect(loadConfig(tempState(), { INSTINCT_AGENT_PUBLIC: on }).agent.public, on).toBe(true);
+    for (const off of ["0", "false", "", "maybe"]) expect(loadConfig(tempState(), { INSTINCT_AGENT_PUBLIC: off }).agent.public, off).toBeUndefined();
+    expect(loadConfig(tempState(), {}).agent.public).toBeUndefined();
+  });
+
   it("saveConfig round-trips", () => {
     const state = tempState();
     const cfg = defaultConfig();

@@ -235,7 +235,13 @@ export interface OwnerProfile {
 export interface InstinctConfig {
   version: 1;
   owner: OwnerProfile;
-  agent: { name: string; handle?: string; persona?: string };
+  /**
+   * `public` marks a demo agent that serves anyone who messages it. Unknown senders
+   * become guests: they hold a conversation, may write to memory and may use the web,
+   * and nothing about the owner opens up. Off by default: an unknown sender is a
+   * stranger who gets one short introduction and a message relay.
+   */
+  agent: { name: string; handle?: string; persona?: string; public?: boolean };
   model: { primary: string; fallback?: string; cheap?: string; thinking?: "off" | "minimal" | "low" | "medium" | "high" };
   computer: { mode: "auto" | "desktopd" | "maritime" | "none"; desktopdUrl?: string; maritimeMcpUrl?: string };
   apps: { enabled: boolean; toolkits: string[] };

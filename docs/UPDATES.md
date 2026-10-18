@@ -94,13 +94,13 @@ what the platform builds). It is not a laptop session:
 One finding worth recording, because the documentation says otherwise: **no
 admin key is needed for this.** An identity-scoped key can rotate its own webhook
 signing key (`inkbox identity signing-key rotate <handle>`) and own its own
-subscription. `docs/SELF-HOST.md` and `docs/INKBOX.md` still claim an org admin
-key is required; that is a documentation bug we will fix.
+subscription. `docs/SELF-HOST.md` and `docs/INKBOX.md` claimed an org admin key
+was required for an identity that already exists; that documentation bug is fixed.
 
 ## 8. Quality
 
-- **980 tests pass across 10 packages, 0 failures** (verified 2026-10-18): core
-  226, apps 147, inkbox 149, server 101, cli 84, gateway 67, payments 66, network
+- **987 tests pass across 10 packages, 0 failures** (verified 2026-10-18): core
+  233, apps 147, inkbox 149, server 101, cli 84, gateway 67, payments 66, network
   65, computer 43, midnight 32. Plus the 13 Compact-runtime simulator tests and
   an indexer-backed end-to-end check in `deploy/midnight-devnet`.
 - **CI is green on `main`**: `ci`, `secret-scan` and `build-images`. Both
@@ -134,6 +134,42 @@ key is required; that is a documentation bug we will fix.
   computed over those exact bytes) and re-deriving the framing headers on both
   sides. Four tests, including the regression case with an inbound
   `content-length`.
+
+## 9. A guest agent, so anyone who texts gets an answer
+
+The deployed agent is one person's agent, and it behaves like one. An unknown
+number is a `stranger`: the prompt tells it to introduce itself once, offer to
+pass a message to the owner and run no tasks. That is the correct behaviour for a
+private agent, and it is why a judge texting @sealai got a polite brush-off.
+
+For a judged demo we want the opposite, without opening the owner's agent. So the
+core grew a **public demo mode**, and the demo runs as its own agent:
+
+- `INSTINCT_AGENT_PUBLIC=1` (seeded into `config.agent.public`) marks an agent as
+  a public surface. Unknown senders become **guests**: `converse` opens from
+  `intro` to a full conversation, `memory.write` and `web.read` open, and the
+  stranger rate limits rise from 3 conversations a day to 50. Everything about
+  the owner stays closed: their profile, location, calendar, mail, contacts,
+  plans, spend, files, computer and `network.*` capabilities are denied to a
+  guest exactly as they are to a stranger, so a prompt injection into a public
+  agent cannot reach the owner or the host.
+- The prompt follows the policy, so the model is told it is a demo agent talking
+  to a guest rather than a stranger to turn away.
+- Flags are seed-only, like the other `INSTINCT_*` variables, and a tier written
+  into `policy.json` is merged over the guest row instead of replacing it.
+
+The plan is one identity and one VM for the guests, separate from the owner's
+agent, so guests share that agent and its memory and never the owner's. Two
+platform limits shape it, both verified on the account:
+
+- the free plan allows **3 agents and 1 awake machine**. Waking the second agent
+  returned `200` and put the primary to sleep, and starting the primary while the
+  second was awake returned `429`. One agent is awake at a time, so the demo agent
+  is woken before a judged window and the owner's agent sleeps meanwhile.
+- creating an identity needs either an Inkbox **org admin key** (the Inkbox
+  Console can mint one) or the **agent self-signup** flow, which needs no key and
+  only a human confirming a code by email. An identity-scoped key gets `403` on
+  identity creation: it manages its own identity and nothing else.
 
 ## How judges test the agent
 

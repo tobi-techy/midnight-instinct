@@ -44,6 +44,11 @@ function splitList(value: string | undefined): string[] {
 
 const COMPUTER_MODES = new Set<InstinctConfig["computer"]["mode"]>(["auto", "desktopd", "maritime", "none"]);
 
+/** Boolean env flags accept the same spellings an operator would try. */
+function enabled(value: string | undefined): boolean {
+  return /^(1|true|yes|on)$/i.test((value ?? "").trim());
+}
+
 /** Build a fresh config from the environment. Used only when config.json is missing. */
 export function configFromEnv(env: NodeJS.ProcessEnv): InstinctConfig {
   const cfg = defaultConfig();
@@ -55,6 +60,8 @@ export function configFromEnv(env: NodeJS.ProcessEnv): InstinctConfig {
   if (timezone) cfg.owner.timezone = timezone;
   if (env.INSTINCT_MODEL?.trim()) cfg.model.primary = env.INSTINCT_MODEL.trim();
   if (env.INSTINCT_AGENT_NAME?.trim()) cfg.agent.name = env.INSTINCT_AGENT_NAME.trim();
+  // INSTINCT_AGENT_PUBLIC=1 makes this a demo agent that answers anyone (see types.ts).
+  if (enabled(env.INSTINCT_AGENT_PUBLIC)) cfg.agent.public = true;
   if (env.INKBOX_AGENT_HANDLE?.trim()) cfg.agent.handle = normalizeHandle(env.INKBOX_AGENT_HANDLE);
   const mode = env.INSTINCT_COMPUTER?.trim() as InstinctConfig["computer"]["mode"] | undefined;
   if (mode && COMPUTER_MODES.has(mode)) cfg.computer.mode = mode;

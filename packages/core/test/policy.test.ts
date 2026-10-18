@@ -301,6 +301,61 @@ describe("PolicyEngine.canEver and overrides", () => {
   });
 });
 
+describe("public demo agents", () => {
+  it("lets a guest converse, remember and search, and keeps the owner's world closed", () => {
+    const engine = new PolicyEngine(defaultPolicy({ public: true }));
+    const guest = principalOf("stranger");
+    for (const cap of ["converse", "owner.relay", "memory.write", "web.read"] as Capability[]) {
+      expect(engine.evaluate(guest, meta([cap]), {}).outcome, cap).toBe("allow");
+    }
+    for (const cap of [
+      "files.read",
+      "files.write",
+      "computer.use",
+      "email.read",
+      "email.send",
+      "calendar.read",
+      "contacts.read",
+      "purchase",
+      "apps.use",
+      "network.ask",
+      "owner.profile.public",
+      "owner.location.approx",
+    ] as Capability[]) {
+      expect(engine.evaluate(guest, meta([cap]), {}).outcome, cap).toBe("deny");
+    }
+  });
+
+  it("changes nothing for the owner or for the tiers below owner", () => {
+    const engine = new PolicyEngine(defaultPolicy({ public: true }));
+    expect(engine.evaluate(principalOf("owner"), meta(["memory.write"]), {}).outcome).toBe("allow");
+    expect(engine.evaluate(principalOf("partner"), meta(["memory.write"]), {}).outcome).toBe("deny");
+    expect(engine.evaluate(principalOf("contact"), meta(["converse"]), {}).outcome).toBe("allow");
+  });
+
+  it("raises the stranger limits enough for a room of guests", () => {
+    expect(defaultPolicy().strangerLimits).toEqual({ conversationsPerDay: 3, messagesPerConversation: 10 });
+    expect(defaultPolicy({ public: true }).strangerLimits).toEqual({ conversationsPerDay: 50, messagesPerConversation: 40 });
+  });
+
+  it("keeps the guest row when policy.json carries tier overrides of its own", () => {
+    const state = tempState();
+    state.writeJson("policy.json", { version: 1, tiers: { friend: { "calendar.read": "yes" }, stranger: { "web.read": "no" } } });
+    const loaded = loadPolicy(state, { public: true });
+    expect(loaded.tiers.stranger?.converse).toBe("yes");
+    expect(loaded.tiers.stranger?.["web.read"]).toBe("no");
+    expect(loaded.tiers.friend?.["calendar.read"]).toBe("yes");
+  });
+
+  it("lets a written policy.json decide, and does not add a guest row of its own", () => {
+    const state = tempState();
+    expect(loadPolicy(state).tiers).toEqual({});
+    savePolicy(state, new PolicyEngine(defaultPolicy({ public: true })).toJSON());
+    // The file is the operator's own choice, so it wins: only the defaults stay closed.
+    expect(loadPolicy(state).tiers.stranger?.converse).toBe("yes");
+  });
+});
+
 describe("loadPolicy / savePolicy", () => {
   it("round-trips and fills defaults for a partial file", () => {
     const state = tempState();

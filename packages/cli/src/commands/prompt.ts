@@ -57,7 +57,7 @@ export interface PromptPreviewOptions {
 export async function ownerPromptInput(ctx: CliContext, opts: PromptPreviewOptions = {}): Promise<PromptInput> {
   const state = ctx.state();
   const config = loadConfig(state, ctx.env);
-  const policy = new PolicyEngine(loadPolicy(state));
+  const policy = new PolicyEngine(loadPolicy(state, { public: config.agent.public === true }));
   const owner = { kind: "owner" as const, id: "owner", tier: "owner" as const, displayName: config.owner.name };
   const skills =
     opts.skills === false

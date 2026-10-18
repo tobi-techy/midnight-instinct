@@ -103,7 +103,8 @@ export async function boot(env: NodeJS.ProcessEnv, opts: BootOptions = {}): Prom
   if (ensurePersona(state, env.INSTINCT_PERSONA)) log(`wrote ${state.path("PERSONA.md")}${env.INSTINCT_PERSONA?.trim() ? " from INSTINCT_PERSONA" : " (default persona)"}`);
 
   const audit = new AuditLog(state);
-  const policy = new PolicyEngine(loadPolicy(state), {
+  // A public demo agent seeds the guest stranger row (see PUBLIC_GUEST_TIER in policy.ts).
+  const policy = new PolicyEngine(loadPolicy(state, { public: config.agent.public === true }), {
     spentTodayUsd: () => audit.spentTodayUsd(config.owner.timezone),
   });
   const approvals = new ApprovalStore(state);

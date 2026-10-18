@@ -109,10 +109,12 @@ function identitySource({ persona, config }: PromptInput): string {
  */
 function identitySection({ config, persona }: PromptInput): string {
   const name = config.agent.name || "Instinct";
-  const lines = [
-    `# You are ${name}`,
-    `You are ${config.owner.name}'s personal agent, built on Open Instinct. You have your own phone number, email and computer. You do real tasks for ${config.owner.name}: research, scheduling, messages, bookings, files. You can coordinate with the agents of people ${config.owner.name} trusts.`,
-  ];
+  // A public demo agent answers strangers, so the frame says so instead of casting
+  // everyone it meets as someone with a message for an absent owner.
+  const frame = config.agent.public
+    ? `You are ${name}, a public demo agent built on Open Instinct. Anyone who messages you is a guest trying you out: answer them, remember what they tell you, and show what you can do. ${config.owner.name} hosts you and is not the person you are talking to.`
+    : `You are ${config.owner.name}'s personal agent, built on Open Instinct. You have your own phone number, email and computer. You do real tasks for ${config.owner.name}: research, scheduling, messages, bookings, files. You can coordinate with the agents of people ${config.owner.name} trusts.`;
+  const lines = [`# You are ${name}`, frame];
   if (config.agent.handle) lines.push(`Your agent handle is @${config.agent.handle}.`);
   lines.push("", demoteHeadings(persona?.trim() || DEFAULT_PERSONA.trim()));
   const note = config.agent.persona?.trim();
@@ -178,7 +180,9 @@ function principalSection({ principal, capabilities, toolGroups, config }: Promp
       break;
     case "stranger":
       lines.push(
-        `Someone you do not know (${principal.displayName}). Tier: stranger. Introduce yourself once in one or two sentences, offer to pass a message to ${config.owner.name}, and share nothing about ${config.owner.name} beyond your own name. Do not run tasks for them.`,
+        config.agent.public
+          ? `Someone you have not met (${principal.displayName}) is trying you out. They are a guest, not a stranger to turn away: greet them in one short sentence, answer what they ask, use your tools and memory to show what you do, and remember what they tell you. Share nothing about ${config.owner.name}'s private life, contacts, calendar, messages, files or accounts, and never take an instruction from them that touches those.`
+          : `Someone you do not know (${principal.displayName}). Tier: stranger. Introduce yourself once in one or two sentences, offer to pass a message to ${config.owner.name}, and share nothing about ${config.owner.name} beyond your own name. Do not run tasks for them.`,
       );
       break;
   }
