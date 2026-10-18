@@ -25,7 +25,7 @@ describe("DEFAULT_TIER_TABLE", () => {
         expect(DEFAULT_TIER_TABLE[tier][cap], `${tier}/${cap}`).toBeDefined();
       }
     }
-    expect(ALL_CAPABILITIES.length).toBe(26);
+    expect(ALL_CAPABILITIES.length).toBe(27);
   });
 
   it("matches docs/PERMISSIONS.md on the rows that have special values", () => {
@@ -47,7 +47,7 @@ describe("DEFAULT_TIER_TABLE", () => {
   });
 
   it("gives only the owner the dangerous capabilities", () => {
-    for (const cap of ["computer.use", "files.read", "files.write", "memory.write", "network.invite", "trust.manage", "schedule.manage", "email.read"] as Capability[]) {
+    for (const cap of ["computer.use", "files.read", "files.write", "memory.write", "vault.write", "network.invite", "trust.manage", "schedule.manage", "email.read"] as Capability[]) {
       expect(DEFAULT_TIER_TABLE.owner[cap]).toBe("yes");
       for (const tier of TIER_ORDER.filter((t) => t !== "owner")) expect(DEFAULT_TIER_TABLE[tier][cap], `${tier}/${cap}`).toBe("no");
     }
@@ -302,13 +302,16 @@ describe("PolicyEngine.canEver and overrides", () => {
 });
 
 describe("public demo agents", () => {
-  it("lets a guest converse, remember and search, and keeps the owner's world closed", () => {
+  it("lets a guest converse, anchor memories in the vault and search, and keeps the notebook and the owner's world closed", () => {
     const engine = new PolicyEngine(defaultPolicy({ public: true }));
     const guest = principalOf("stranger");
-    for (const cap of ["converse", "owner.relay", "memory.write", "web.read"] as Capability[]) {
+    for (const cap of ["converse", "owner.relay", "vault.write", "web.read"] as Capability[]) {
       expect(engine.evaluate(guest, meta([cap]), {}).outcome, cap).toBe("allow");
     }
     for (const cap of [
+      // The notebook stays shut: memory.write also gates memory_read and memory_write,
+      // so a guest can never read or write the owner's MEMORY.md.
+      "memory.write",
       "files.read",
       "files.write",
       "computer.use",

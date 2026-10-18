@@ -209,6 +209,8 @@ export async function boot(env: NodeJS.ProcessEnv, opts: BootOptions = {}): Prom
       midnightTools({
         client: midnightClient,
         shielded,
+        // A public demo agent opens the vault to a guest, in the guest's own scope.
+        publicMode: config.agent.public === true,
         auditAppend: (entry) => audit.append(entry),
       }),
     );

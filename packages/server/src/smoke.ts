@@ -236,10 +236,10 @@ async function main(): Promise<void> {
 
     console.log("6. a public demo agent treats an unknown number as a guest");
     // INSTINCT_AGENT_PUBLIC marks an agent that answers anyone. The same unknown sender
-    // who was turned away in step 2 now gets a conversation: memory opens, the prompt
-    // says "guest", and nothing about the owner is reachable.
+    // who was turned away in step 2 now gets a conversation and the vault in their own
+    // scope, while the owner's notebook, profile and contacts stay out of reach.
     const guestDir = mkdtempSync(join(tmpdir(), "instinct-smoke-guest-"));
-    const guestEnv: NodeJS.ProcessEnv = { ...env, INSTINCT_DATA_DIR: guestDir, INSTINCT_AGENT_NAME: "Seal Demo", INSTINCT_AGENT_PUBLIC: "1" };
+    const guestEnv: NodeJS.ProcessEnv = { ...env, INSTINCT_DATA_DIR: guestDir, INSTINCT_AGENT_NAME: "Seal Demo", INSTINCT_AGENT_PUBLIC: "1", MIDNIGHT_MODE: "mock" };
     const guestOutbox = new RecordingOutbox();
     const guest = await boot(guestEnv, { model: faux.getModel("faux-1"), streamFn, outbox: guestOutbox, logger: quiet });
     const guestServer = createHttpServer(guest, { env: guestEnv, logger: quiet });
@@ -248,8 +248,8 @@ async function main(): Promise<void> {
     try {
       check(guest.config.agent.public === true, "the flag reaches config.json");
       faux.setResponses([
-        fauxAssistantMessage([fauxToolCall("memory_write", { text: "guest likes the demo", durable: true })], { stopReason: "toolUse" }),
-        fauxAssistantMessage("Noted. Tell me something else and I will prove I kept it."),
+        fauxAssistantMessage([fauxToolCall("vault_commit", { text: "guest likes the demo", category: "preference" })], { stopReason: "toolUse" }),
+        fauxAssistantMessage("Anchored. Ask me to prove it whenever you like."),
       ]);
       const guestEvent = {
         ...event,
@@ -271,12 +271,20 @@ async function main(): Promise<void> {
       check(guestSends.length === 1, `the guest got exactly one iMessage reply (got ${guestSends.length})`);
       const guestMemoryFile = join(guestDir, "memory", "MEMORY.md");
       const guestMemory = existsSync(guestMemoryFile) ? readFileSync(guestMemoryFile, "utf8") : "";
-      check(guestMemory.includes("guest likes the demo"), "the guest's memory_write landed: memory is open to a guest");
+      check(!guestMemory.includes("guest likes the demo"), "the guest's note stayed out of the owner's notebook");
       const guestCalls = new AuditLog(guest.state)
         .read({ kinds: ["tool_call"] })
         .filter((e) => e.conversationKey === "imessage:conv_guest")
-        .map((e) => e.detail as { tool?: string; isError?: boolean });
-      check(guestCalls.some((c) => c.tool === "memory_write" && c.isError === false), `memory_write executed for the guest (got ${JSON.stringify(guestCalls)})`);
+        .map((e) => e.detail as { tool?: string; isError?: boolean; result?: string });
+      const anchored = guestCalls.find((c) => c.tool === "vault_commit");
+      check(
+        anchored !== undefined && anchored.isError === false && /Anchored for this conversation/.test(anchored.result ?? ""),
+        `vault_commit anchored the guest's note in the guest's own scope (got ${JSON.stringify(anchored)})`,
+      );
+      const midnightFile = join(guestDir, "midnight.json");
+      const midnightState = existsSync(midnightFile) ? (JSON.parse(readFileSync(midnightFile, "utf8")) as { commitments?: Record<string, { scope?: string }> }) : {};
+      const commitments = Object.values(midnightState.commitments ?? {});
+      check(commitments.length === 1 && Boolean(commitments[0]?.scope), `one scoped commitment is on record (got ${JSON.stringify(commitments)})`);
       const guestPrincipal = resolvePrincipal(
         { id: "msg_smoke_guest_1", conversationKey: "imessage:conv_guest", text: "hi", from: GUEST_PHONE, channel: "imessage", replyRef: {}, receivedAt: new Date().toISOString() } as InboundMessage,
         guest.config,
@@ -288,6 +296,8 @@ async function main(): Promise<void> {
       check(!prompt.includes("Do not run tasks for them"), "the guest prompt does not turn the sender away");
       check(prompt.includes("Share nothing about Smoke Owner"), "the guest prompt still closes the owner's world");
       check(!prompt.includes(OWNER_PHONE), "the guest prompt carries no owner contact details");
+      check(prompt.includes("vault.write"), "the guest's capabilities include the vault");
+      check(!prompt.includes("memory.write"), "the guest's capabilities exclude the owner's notebook");
     } finally {
       await new Promise<void>((resolve) => guestServer.close(() => resolve()));
       await closeInkboxInbox(guest);

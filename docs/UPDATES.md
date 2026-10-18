@@ -99,9 +99,9 @@ was required for an identity that already exists; that documentation bug is fixe
 
 ## 8. Quality
 
-- **987 tests pass across 10 packages, 0 failures** (verified 2026-10-18): core
+- **996 tests pass across 10 packages, 0 failures** (verified 2026-10-18): core
   233, apps 147, inkbox 149, server 101, cli 84, gateway 67, payments 66, network
-  65, computer 43, midnight 32. Plus the 13 Compact-runtime simulator tests and
+  65, computer 43, midnight 41. Plus the 13 Compact-runtime simulator tests and
   an indexer-backed end-to-end check in `deploy/midnight-devnet`.
 - **CI is green on `main`**: `ci`, `secret-scan` and `build-images`. Both
   Dockerfiles were silently broken — they omitted the `packages/midnight`
@@ -186,6 +186,29 @@ platform limits shape it, both verified on the account:
   Console can mint one) or the **agent self-signup** flow, which needs no key and
   only a human confirming a code by email. An identity-scoped key gets `403` on
   identity creation: it manages its own identity and nothing else.
+
+## 10. The vault, for guests
+
+The submission tells judges to "ask it to prove a fact about that memory", and on a
+private agent only the owner can: `vault_commit` and `vault_prove_reveal` refused
+anyone else, so that step failed on a demo agent. Three changes fixed it.
+
+- A new `vault.write` capability carries the two vault tools. `memory.write` stays the
+  owner's notebook, which matters because it also gates `memory_read`: opening memory to
+  a guest would have handed them the owner's `MEMORY.md`.
+- In public mode an unknown sender may commit and prove inside a vault scope of their own.
+  `MidnightClient` records the scope on the commitment and binds the salt to it, so two
+  guests anchoring the same words with the same salt still get different commitments. A
+  guest cannot prove another scope's commitment, the state file stores a hash of the
+  sender rather than the sender, and a guest's plaintext never enters the owner's
+  notebook: it stays in the conversation. `vault_status` and `allowance_check` stay
+  owner-only.
+- The proof reply hands over the whole attestation id instead of a truncated one, and the
+  Midnight guidance and the guest persona say to quote it so the other side can verify.
+
+The end-to-end smoke test covers the guest path with the vault wired in mock mode: the
+guest's note is anchored, `midnight.json` holds one scoped commitment, `MEMORY.md` stays
+clean, and the guest's prompt lists `vault.write` but not `memory.write`.
 
 ## How judges test the agent
 

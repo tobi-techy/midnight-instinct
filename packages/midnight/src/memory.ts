@@ -12,7 +12,7 @@
  */
 import type { AuditLog, MemoryStore } from "@open-instinct/core";
 import { categoryName, parseCategory } from "./commit.js";
-import type { MidnightClient } from "./client.js";
+import { OWNER_SCOPE, type MidnightClient } from "./client.js";
 
 export interface ShieldedMemoryOptions {
   inner: MemoryStore;
@@ -25,11 +25,22 @@ export interface ShieldedMemoryOptions {
 
 export interface AnchoredWrite {
   saved: boolean;
+  /** False when the text was anchored for someone else and did not enter the owner's notebook. */
+  notebook?: boolean;
   commitment?: string;
   txHash?: string;
   explorerUrl?: string;
   category?: string;
   error?: string;
+}
+
+export interface RememberOptions {
+  /**
+   * Whose vault this belongs to. Omitted (or the owner scope) is the owner's own
+   * notebook. Any other scope anchors the commitment only: the plaintext stays in
+   * the conversation it was given in and never enters the owner's notebook.
+   */
+  scope?: string;
 }
 
 export class ShieldedMemory {
@@ -69,22 +80,29 @@ export class ShieldedMemory {
   }
 
   /** Append to durable memory AND anchor a commitment. Journal lines stay local-only. */
-  async remember(text: string, category?: string): Promise<AnchoredWrite> {
+  async remember(text: string, category?: string, opts: RememberOptions = {}): Promise<AnchoredWrite> {
     const clean = text.trim();
     if (!clean) return { saved: false, error: "nothing to remember" };
-    this.inner.appendDurable(clean);
+    // A guest's note is not the owner's note: anchor it, keep the plaintext out of
+    // the owner's notebook, and leave it in the conversation that produced it.
+    const notebook = !opts.scope || opts.scope === OWNER_SCOPE;
+    if (notebook) this.inner.appendDurable(clean);
     try {
-      const committed = await this.client.commit({ text: clean, category });
+      const committed = await this.client.commit({ text: clean, category, ...(opts.scope ? { scope: opts.scope } : {}) });
       this.audit?.append({
         kind: "policy",
         conversationKey: this.conversationKey,
         principal: this.principalId,
-        detail: { tool: "vault_commit", commitment: committed.commitment, txHash: committed.txHash, mode: committed.mode, category: committed.category },
+        detail: { tool: "vault_commit", commitment: committed.commitment, txHash: committed.txHash, mode: committed.mode, category: committed.category, ...(notebook ? {} : { scope: "guest" }) },
       });
-      return { saved: true, commitment: committed.commitment, txHash: committed.txHash, category: committed.category, ...(committed.explorerUrl ? { explorerUrl: committed.explorerUrl } : {}) };
+      return { saved: true, notebook, commitment: committed.commitment, txHash: committed.txHash, category: committed.category, ...(committed.explorerUrl ? { explorerUrl: committed.explorerUrl } : {}) };
     } catch (err) {
       // The local note is saved; the anchor failed. The agent must say so.
-      return { saved: true, error: `saved locally but the Midnight anchor failed: ${err instanceof Error ? err.message : String(err)}` };
+      return {
+        saved: notebook,
+        notebook,
+        error: `${notebook ? "saved locally but" : "not saved:"} the Midnight anchor failed: ${err instanceof Error ? err.message : String(err)}`,
+      };
     }
   }
 

@@ -56,6 +56,7 @@ spend or scope limit.
 | `computer.use` | yes | no | no | no | no | no |
 | `files.read`, `files.write` | yes | no | no | no | no | no |
 | `memory.write` | yes | no | no | no | no | no |
+| `vault.write` (anchor a shielded memory, prove it without revealing it) | yes | no | no | no | no | no |
 | `network.ask` (ask another Instinct on the owner's behalf) | yes | yes | yes | yes | no | no |
 | `network.invite` | yes | no | no | no | no | no |
 | `trust.manage` | yes | no | no | no | no | no |
@@ -80,9 +81,16 @@ capabilities on the stranger row and raises the stranger rate limits. Nothing el
 |---|---|---|
 | `converse` | intro only | yes |
 | `owner.relay` | yes, 3/day | yes, 50/day |
-| `memory.write` | no | yes |
+| `vault.write` | no | yes, in the guest's own vault scope |
 | `web.read` | no | yes |
 | Stranger limits | 3 conversations a day, 10 messages each | 50 conversations a day, 40 messages each |
+
+`vault.write` is the vault, not the notebook: a guest may anchor a shielded commitment and prove
+it later without revealing it, inside a scope keyed to their own principal. The scope is hashed
+with the vault key before it is written down, so the state file never records who anchored what,
+and `vault_prove_reveal` refuses a commitment anchored in someone else's scope. A guest's text
+stays in the conversation: it does not enter the owner's `MEMORY.md`, and `memory.write` stays
+closed, which also keeps `memory_read`, `memory_write` and `vault_status` out of a guest's hands.
 
 Everything about the owner stays closed: `owner.profile.public`, `owner.profile.preferences`,
 location, calendar, mail, contacts, plans, spend, `computer.use`, `files.read`, `files.write`,

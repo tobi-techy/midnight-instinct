@@ -18,6 +18,23 @@ This package adds a second, private dimension to every durable memory:
    Limits and running totals are public (an allowance is a statement, like a
    card limit); what the circuit guarantees is that no spend passes the limit.
 
+## Who may use the vault
+
+`vault_commit`, `vault_prove_reveal` and `vault_status` need the `vault.write` and
+`memory.write` capabilities, which by default only the owner has, so on a private
+agent the vault is the owner's. A **public demo agent** (`INSTINCT_AGENT_PUBLIC=1`,
+see `docs/PERMISSIONS.md`) opens `vault_commit` and `vault_prove_reveal` to an unknown
+sender as a **guest**, inside a vault scope keyed to that sender:
+
+- the scope is hashed with the vault key before it is stored, so the state file never
+  records which phone number anchored what;
+- the salt is bound to the scope, so two guests anchoring the same words with the same
+  salt still get different commitments;
+- `prove` refuses a commitment anchored in another scope;
+- a guest's text is not written to the owner's notebook, and `memory.write` stays
+  closed, so `memory_read`, `memory_write` and `vault_status` remain out of reach.
+  The guest's plaintext stays in the conversation it was given in.
+
 ## Modes
 
 | Mode | Network | Use |

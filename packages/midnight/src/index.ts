@@ -21,6 +21,7 @@ export {
 } from "./commit.js";
 export {
   MidnightClient,
+  OWNER_SCOPE,
   newPersistedState,
   normalizeState,
   disclosureCodeOf,

@@ -9,7 +9,7 @@
  * (sha256 commitments, single-use nullifiers, spend totals) so demos, CI and
  * the smoke test run with no faucet and no network.
  */
-import { randomBytes } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
 import { allowanceKey, centsToUsd, categoryName, CATEGORIES, CATEGORY_CODES, mockCommitmentOf, newAttestationId, parseCategory, preimageOf, usdToCents, type CategoryLabel } from "./commit.js";
 import type { MidnightEnv } from "./config.js";
 
@@ -17,6 +17,12 @@ export interface CommitInput {
   text: string;
   category?: string;
   salt?: string;
+  /**
+   * Whose vault this commitment belongs to. Omitted means the owner's. A public
+   * demo agent passes the sender's principal id, so a guest can anchor and prove
+   * inside a scope of their own and nobody else can prove it.
+   */
+  scope?: string;
 }
 
 export interface CommitResult {
@@ -34,6 +40,8 @@ export interface ProveInput {
   commitment: string;
   /** What the verifier learns: a category label, or "existence" for proof-of-existence only. */
   disclose?: string;
+  /** The vault scope the commitment was anchored in. Omitted means the owner's. */
+  scope?: string;
   /**
    * Optional verifier-chosen challenge (64 hex chars). When a verifier sends a
    * fresh nonce, pass it here so the proof is bound to that verification
@@ -132,9 +140,23 @@ export interface MidnightStatus {
 interface PersistedState {
   version: 1;
   vaultKey: string;
-  commitments: Record<string, { category: string; code: number; salt: string; txHash: string; at: string }>;
+  commitments: Record<string, { category: string; code: number; salt: string; txHash: string; at: string; scope?: string }>;
   nullifiers: Record<string, { commitment: string; disclosed: number; txHash: string; at: string }>;
   allowances: Record<string, { maxCents: number; spentCents: number; active: boolean }>;
+}
+
+/** The scope every commitment had before scopes existed: the owner's. */
+export const OWNER_SCOPE = "owner";
+
+/**
+ * A scope id, hashed with the vault key before it reaches the state file. The file
+ * then records that some sender anchored a commitment without recording the phone
+ * number or handle that did it, and two callers with the same scope id still hash to
+ * the same value. State written before scopes existed has no scope field and is
+ * treated as the owner's.
+ */
+function scopeHash(vaultKey: string, scope: string): string {
+  return createHash("sha256").update(`${vaultKey}\nscope\n${scope.trim() || OWNER_SCOPE}`).digest("hex").slice(0, 32);
 }
 
 function emptyState(vaultKey: string): PersistedState {
@@ -268,12 +290,20 @@ export class MidnightClient {
     const { CATEGORY_CODES } = await import("./commit.js");
     const code = CATEGORY_CODES[category];
     const salt = input.salt ?? randomBytes(32).toString("hex");
+    const scope = scopeHash(this.state.vaultKey, input.scope ?? OWNER_SCOPE);
+    // Bind the salt to the scope, so two scopes can never share a commitment even for
+    // identical text and an identical caller-supplied salt. One guest cannot recognise
+    // another's commitment by guessing the words, and the circuit only ever sees a
+    // 32-byte salt, which is all it wants.
+    const boundSalt = createHash("sha256").update(`${scope}\n${salt}`).digest("hex");
     // The circuit takes only the digest and a random salt; persistentCommit
     // mixes in the salt so a guessable memory still cannot be brute-forced.
     const preimage = preimageOf(text);
-    const mockCommitment = mockCommitmentOf(preimage, salt);
-    if (this.mode === "mock" && this.state.commitments[mockCommitment]) {
-      const existing = this.state.commitments[mockCommitment]!;
+    const mockCommitment = mockCommitmentOf(preimage, boundSalt);
+    const existing = this.state.commitments[mockCommitment];
+    // Same text and salt can only be the same commitment within one scope; a row
+    // that belongs to someone else must not be handed back to this caller.
+    if (this.mode === "mock" && existing && (existing.scope ?? scopeHash(this.state.vaultKey, OWNER_SCOPE)) === scope) {
       return { commitment: mockCommitment, category: existing.category as CategoryLabel, code: existing.code, salt: existing.salt, txHash: existing.txHash, mode: this.mode, ...(this.env.contractAddress ? { contractAddress: this.env.contractAddress } : {}) };
     }
     let commitment: string;
@@ -286,7 +316,7 @@ export class MidnightClient {
       const parsed = await postJson(this.fetchImpl, `${this.env.proofUrl}/commit`, {
         contract: this.env.contractAddress,
         preimage,
-        salt,
+        salt: boundSalt,
         // The circuit binds this code to the commitment; the ledger stores only a
         // hiding commitment to it, so the proof can disclose it truthfully later.
         category: code,
@@ -294,7 +324,7 @@ export class MidnightClient {
       commitment = requiredField(parsed, "commitment", "commit");
       txHash = requiredField(parsed, "txHash", "commit");
     }
-    this.state.commitments[commitment] = { category, code, salt, txHash, at: this.now().toISOString() };
+    this.state.commitments[commitment] = { category, code, salt: boundSalt, txHash, at: this.now().toISOString(), scope };
     this.save(this.state);
     const { explorerTxUrl } = await import("./config.js");
     const explorerUrl = explorerTxUrl(this.env, txHash);
@@ -310,6 +340,13 @@ export class MidnightClient {
     const commitment = input.commitment.trim().toLowerCase();
     if (!/^[0-9a-f]{64}$/.test(commitment)) throw new Error("commitment must be 64 hex chars");
     if (!this.state.commitments[commitment]) throw new Error("unknown commitment: commit it first with vault_commit");
+    // A commitment is provable only from the scope that anchored it. The owner's rows
+    // are the default, so a state file written before scopes existed still proves.
+    const scope = scopeHash(this.state.vaultKey, input.scope ?? OWNER_SCOPE);
+    const row = this.state.commitments[commitment]!;
+    if ((row.scope ?? scopeHash(this.state.vaultKey, OWNER_SCOPE)) !== scope) {
+      throw new Error("that commitment belongs to another vault scope: only the person who committed it can prove it");
+    }
     const raw = (input.disclose ?? "existence").trim().toLowerCase();
     let disclosed: number;
     let disclosedLabel: string;
@@ -324,7 +361,6 @@ export class MidnightClient {
     }
     // The circuit refuses a category the memory was not committed with; fail
     // here too so mock mode cannot claim what local/testnet would reject.
-    const row = this.state.commitments[commitment]!;
     if (disclosed !== 0 && disclosed !== row.code) {
       throw new Error(`cannot disclose ${disclosedLabel}: this memory was committed as ${row.category}`);
     }

@@ -1,19 +1,23 @@
 /**
  * Agent tools for the Midnight layer. Three hero tools plus the stretch
- * allowance tool. Capabilities reuse the existing policy table (memory.write,
- * trust.manage, purchase) so the tier matrix in core/policy.ts keeps working
- * with zero changes: strangers never see these tools, partners can be granted
- * proofs, only the owner commits.
+ * allowance tool. Capabilities reuse the existing policy table (vault.write,
+ * memory.write, purchase) so the tier matrix in core/policy.ts keeps working:
+ * by default only the owner commits or proves anything, and `vault_status` and
+ * the allowance stay owner-only. On a public demo agent (config.agent.public) a
+ * guest may commit and prove too, inside a vault scope of their own, so one
+ * guest can never prove or read another's commitment.
  */
 import { Type } from "typebox";
 import { defineTool, textResult, type Principal, type RegisteredTool, type ToolContext, type ToolResultLike } from "@open-instinct/core";
 import { categoryName } from "./commit.js";
-import type { MidnightClient } from "./client.js";
+import { OWNER_SCOPE, type MidnightClient } from "./client.js";
 import type { ShieldedMemory } from "./memory.js";
 
 export interface MidnightToolDeps {
   client: MidnightClient;
   shielded: ShieldedMemory;
+  /** True on a public demo agent: unknown senders may use the vault in their own scope. */
+  publicMode?: boolean;
   auditAppend?: (entry: { kind: "policy"; conversationKey?: string; principal?: string; detail: Record<string, unknown> }) => void;
   now?: () => Date;
 }
@@ -24,6 +28,17 @@ function errorResult(text: string): ToolResultLike {
 
 function isOwner(p: Principal): boolean {
   return p.kind === "owner";
+}
+
+/**
+ * The vault scope this caller commits and proves in. The owner is always the owner
+ * scope. A guest gets the scope of their own principal id, which the client hashes
+ * before it reaches the state file. Anyone else has no scope and no vault access.
+ */
+function vaultScopeOf(p: Principal, publicMode: boolean): string | undefined {
+  if (isOwner(p)) return OWNER_SCOPE;
+  if (publicMode && p.kind === "stranger") return p.id;
+  return undefined;
 }
 
 function clip(text: string, max: number): string {
@@ -42,19 +57,23 @@ export function midnightTools(deps: MidnightToolDeps): RegisteredTool[] {
     name: "vault_commit",
     label: "Anchor memory on Midnight",
     description:
-      "Save a durable memory AND anchor its shielded commitment on Midnight. The text stays on this host; the chain only gets an opaque hash plus a tx hash. Returns the commitment and tx hash to quote back. Owner only.",
+      "Save a durable memory AND anchor its shielded commitment on Midnight. The text stays on this host; the chain only gets an opaque hash plus a tx hash. Returns the commitment and tx hash to quote back. Owner only, except on a public demo agent where a guest may anchor inside their own scope.",
     parameters: Type.Object({
       text: Type.String({ description: "The memory to save, one or two sentences" }),
       category: Type.Optional(Type.String({ description: "health, finance, contact, preference or other (default other)" })),
     }),
-    meta: { capabilities: ["memory.write"], group: "memory", describe: (a) => `vault_commit ${argText(a, "text")}` },
+    meta: { capabilities: ["vault.write"], group: "memory", describe: (a) => `vault_commit ${argText(a, "text")}` },
     execute: async ({ text, category }, ctx) => {
-      if (!isOwner(ctx.principal)) return errorResult("Only the owner can anchor memories. Offer to pass the request to the owner instead.");
-      const out = await shielded.remember(text, category);
-      if (!out.saved) return errorResult(out.error ?? "nothing to remember");
-      if (out.error) return { content: [{ type: "text", text: `Saved locally. ${out.error}` }], isError: true };
+      const scope = vaultScopeOf(ctx.principal, deps.publicMode === true);
+      if (!scope) return errorResult("Only the owner can anchor memories. Offer to pass the request to the owner instead.");
+      const out = await shielded.remember(text, category, { scope });
+      if (out.error) return { content: [{ type: "text", text: out.error }], isError: true };
+      if (!out.saved) return errorResult("nothing to remember");
       const link = out.explorerUrl ? `\nVerify: ${out.explorerUrl}` : "";
-      return textResult(`Saved privately as a ${out.category} memory. Commitment ${out.commitment} anchored on Midnight (tx ${out.txHash}, mode ${client.mode}).${link}`);
+      const line = out.notebook
+        ? `Saved privately as a ${out.category} memory.`
+        : `Anchored for this conversation as a ${out.category} memory; the text stays in the chat and the chain holds only the hash. Quote the commitment if you prove it later.`;
+      return textResult(`${line} Commitment ${out.commitment} anchored on Midnight (tx ${out.txHash}, mode ${client.mode}).${link}`);
     },
   });
 
@@ -62,20 +81,21 @@ export function midnightTools(deps: MidnightToolDeps): RegisteredTool[] {
     name: "vault_prove_reveal",
     label: "Prove a memory without revealing it",
     description:
-      "Generate a Midnight selective-disclosure proof for an anchored memory. The verifier learns only the disclosed category (or bare existence), never the text. Give the commitment from vault_commit or vault_status. Owner only.",
+      "Generate a Midnight selective-disclosure proof for an anchored memory. The verifier learns only the disclosed category (or bare existence), never the text. Give the commitment from vault_commit or vault_status. Owner only, except on a public demo agent where a guest may prove a commitment anchored in their own scope.",
     parameters: Type.Object({
       commitment: Type.String({ description: "64 hex chars from vault_commit" }),
       disclose: Type.Optional(Type.String({ description: "Category to disclose (health, finance, contact, preference, other) or 'existence' for proof-of-existence only (default)" })),
     }),
-    meta: { capabilities: ["memory.write"], group: "memory", describe: (a) => `vault_prove_reveal ${argText(a, "commitment")}` },
+    meta: { capabilities: ["vault.write"], group: "memory", describe: (a) => `vault_prove_reveal ${argText(a, "commitment")}` },
     execute: async ({ commitment, disclose }, ctx) => {
-      if (!isOwner(ctx.principal)) return errorResult("Only the owner can generate proofs. Offer to pass the request to the owner instead.");
+      const scope = vaultScopeOf(ctx.principal, deps.publicMode === true);
+      if (!scope) return errorResult("Only the owner can generate proofs. Offer to pass the request to the owner instead.");
       try {
-        const proof = await client.prove({ commitment, ...(disclose ? { disclose } : {}) });
+        const proof = await client.prove({ commitment, scope, ...(disclose ? { disclose } : {}) });
         deps.auditAppend?.({ kind: "policy", conversationKey: ctx.conversationKey, principal: ctx.principal.id, detail: { tool: "vault_prove_reveal", attestationId: proof.attestationId, disclosed: proof.disclosed, txHash: proof.txHash, mode: proof.mode } });
         const link = proof.explorerUrl ? `\nVerify: ${proof.explorerUrl}` : "";
         return textResult(
-          `Proof recorded on Midnight (tx ${proof.txHash}, mode ${proof.mode}). The verifier learns only this: ${proof.disclosedLabel} (${proof.disclosed === 0 ? "bare existence, no category" : `category code ${proof.disclosed}`}). Attestation ${proof.attestationId.slice(0, 16)}… is single-use and cannot be replayed.${link}`,
+          `Proof recorded on Midnight (tx ${proof.txHash}, mode ${proof.mode}). The verifier learns only this: ${proof.disclosedLabel} (${proof.disclosed === 0 ? "bare existence, no category" : `category code ${proof.disclosed}`}). Attestation id ${proof.attestationId} is single-use and cannot be replayed. Hand the whole id over so the other side can verify it themselves.${link}`,
         );
       } catch (err) {
         return errorResult(err instanceof Error ? err.message : String(err));

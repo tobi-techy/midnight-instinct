@@ -59,6 +59,7 @@ export type Capability =
   | "files.read"
   | "files.write"
   | "memory.write"
+  | "vault.write"
   | "network.ask"
   | "network.invite"
   | "trust.manage"

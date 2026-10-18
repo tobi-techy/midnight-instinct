@@ -49,6 +49,11 @@ const ROWS: Record<Capability, Row> = {
   "files.read": ["yes", "no", "no", "no", "no", "no"],
   "files.write": ["yes", "no", "no", "no", "no", "no"],
   "memory.write": ["yes", "no", "no", "no", "no", "no"],
+  // vault.write: anchor a shielded memory on Midnight and prove it later without
+  // revealing it. Separate from memory.write so a public demo agent can open the
+  // vault to a guest while the owner's notebook stays closed: a guest's commitment
+  // lives in its own vault scope (see packages/midnight/src/client.ts).
+  "vault.write": ["yes", "no", "no", "no", "no", "no"],
   "network.ask": ["yes", "yes", "yes", "yes", "no", "no"],
   "network.invite": ["yes", "no", "no", "no", "no", "no"],
   "trust.manage": ["yes", "no", "no", "no", "no", "no"],
@@ -105,15 +110,18 @@ export function defaultSpendPolicy(): SpendPolicy {
 /**
  * The stranger row a public demo agent starts from. A guest is an unknown sender who
  * is here to try the agent out, so `converse` is a full conversation rather than the
- * one-line introduction the default stranger row allows, and memory plus the public
- * web are open. Everything that touches the owner stays closed, and so do the file,
- * computer, mail, calendar and spend capabilities: a demo agent is a public surface,
- * and a prompt injection on it must not reach the owner or the host.
+ * one-line introduction the default stranger row allows, the vault opens (anchoring
+ * and proving commitments inside the guest's own scope) and the public web is open.
+ * Everything that touches the owner stays closed, including the notebook itself:
+ * `memory.write` stays "no", so `memory_read` and `memory_write` never reach a guest.
+ * The file, computer, mail, calendar and spend capabilities are closed too: a demo
+ * agent is a public surface, and a prompt injection on it must not reach the owner
+ * or the host.
  */
 export const PUBLIC_GUEST_TIER: Partial<Record<Capability, Permission>> = {
   converse: "yes",
   "owner.relay": "yes",
-  "memory.write": "yes",
+  "vault.write": "yes",
   "web.read": "yes",
 };
 
