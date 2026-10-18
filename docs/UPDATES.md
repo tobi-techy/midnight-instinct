@@ -149,11 +149,16 @@ key is required; that is a documentation bug we will fix.
 Two caveats, stated plainly:
 
 - The VM runs on an `always_on` tier but with an **auto-sleep** policy. A message
-  that arrives while the VM is asleep does not reach the agent. We wake the agent
-  before a judged demo, and keep-awake is item 1 below.
-- Every delivery is logged. If a reply does not arrive, the operator can replay
-  it: `inkbox webhook delivery list` then `inkbox webhook delivery replay
-  <delivery-id>`. No judge message is lost.
+  that arrives while the VM is asleep does not reach the agent. Turning sleep off
+  is a paid add-on (`POST /agents/{id}/resize {"always_on": true}` answers
+  `402 ... need a paid plan`), so we wake the agent before a judged window
+  instead, and keep-awake is item 1 below.
+- Every delivery is logged, and a delivery that arrived while the agent was
+  asleep is recoverable: `inkbox webhook delivery list` then
+  `inkbox webhook delivery replay <delivery-id>`. We exercised exactly that
+  during the build — an email delivered at 10:42 while the VM was asleep
+  recorded `502`, and replaying it after the wake produced `204` and a full
+  model-written reply. No judge message is lost.
 
 ## What is next to build
 
