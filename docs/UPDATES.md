@@ -242,6 +242,32 @@ The smoke test now runs the whole loop: an unknown number commits a memory as a 
 for a proof, and the proof is then checked through the tunnel listener — JSON and page — with
 the owner's surface still hidden.
 
+## 12. What runs where, and what it proves
+
+Worth stating without decoration, because a judge will ask:
+
+- **The deployed agent anchors in `mock` mode.** Its commitments are real sha256
+  commitments, its nullifiers are real single-use nullifiers, and its vault scope per sender
+  is real; the only thing missing is a submitted transaction. The verifier page says so in
+  as many words on every check, so nothing overstates what a link proves.
+- **The chain evidence is the Preprod deployment of 2026-10-16.** Both contracts are live
+  (`memory-vault` `6e9d608a…`, `allowance-registry` `fd4bfac0…`), Preprod holds the
+  commitment `1443be15…` to `"I take medication X daily"`, one health attestation
+  `c91ebd08d0010b1a1aac921345ba5fe69354b87e910d346dd753573e7d352145`, and its nullifier. The
+  recorded `instinct midnight verify` output and the raw `GET /verify/…` JSON are in
+  [SUBMISSION.md](SUBMISSION.md).
+- **Why the agent is not pointed at Preprod itself.** The adapter needs the ZK proof server
+  (6300) plus a Blockfrost-backed indexer and a funded wallet, it listens on `127.0.0.1:6400`,
+  and the first indexer sync applies ~1.66M dust events (17 hours on this machine). A
+  Maritime VM reaches none of that, and `MIDNIGHT_MODE=testnet` without a reachable adapter
+  would fail every commit. Pointing the agent at a chain is a configuration change, not code:
+  set `MIDNIGHT_MODE=testnet`, `MIDNIGHT_PROOF_URL=<adapter>`,
+  `MIDNIGHT_CONTRACT_ADDRESS=6e9d608a…` and the same `MIDNIGHT_VERIFY_URL`, and the verifier
+  page starts reading Preprod — including the recorded `c91ebd08…` id.
+
+So the demo runs end to end on the live agent (commit, prove, public verify) and the chain
+half of the story is the recorded Preprod run, reproducible from `deploy/midnight-devnet/`.
+
 ## How judges test the agent
 
 1. Text **`connect @sealai`** to the Inkbox router at **+16504849720** (or, to
