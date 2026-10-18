@@ -41,7 +41,7 @@ describe("config", () => {
     expect(loadConfig(tempState(), { INSTINCT_TIMEZONE: "Europe/Berlin", INSTINCT_OWNER_TIMEZONE: "Asia/Tokyo" }).owner.timezone).toBe("Asia/Tokyo");
   });
 
-  it("prefers the file over env on later loads, except INSTINCT_MODEL", () => {
+  it("prefers the file over env on later loads, except the operator settings", () => {
     const state = tempState();
     loadConfig(state, { INSTINCT_OWNER_NAME: "Maria", INSTINCT_OWNER_PHONE: "+16175550100" });
     const again = loadConfig(state, { INSTINCT_OWNER_NAME: "Someone Else", INSTINCT_OWNER_PHONE: "+19999999999", INSTINCT_COMPUTER: "none" });
@@ -50,6 +50,12 @@ describe("config", () => {
     expect(again.computer.mode).toBe("auto");
     const swapped = loadConfig(state, { INSTINCT_MODEL: "openai-compatible/gpt-5" });
     expect(swapped.model.primary).toBe("openai-compatible/gpt-5");
+    // A hosted agent is named and marked public by the platform that runs it, not by
+    // editing its data dir: those follow INSTINCT_MODEL's rule even when a file exists.
+    const hosted = loadConfig(state, { INSTINCT_AGENT_NAME: "Seal", INSTINCT_AGENT_PUBLIC: "1" });
+    expect(hosted.agent.name).toBe("Seal");
+    expect(hosted.agent.public).toBe(true);
+    expect(loadConfig(state, {}).agent.name).toBe("Instinct");
     // The override is per process; the file keeps what was saved.
     expect(state.readJson<{ model: { primary: string } }>("config.json", { model: { primary: "" } }).model.primary).toBe(DEFAULT_MODEL);
   });

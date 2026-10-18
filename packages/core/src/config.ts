@@ -99,7 +99,12 @@ export function loadConfig(state: StateDir, env: NodeJS.ProcessEnv): InstinctCon
     return seeded;
   }
   const cfg = withDefaults(state.readJson<Partial<InstinctConfig>>(FILE, {}));
+  // Deployment env wins over a file that already exists, the same way INSTINCT_MODEL
+  // already did: these are operator settings, and a hosted agent gets them injected
+  // rather than edited into its data dir.
   if (env.INSTINCT_MODEL?.trim()) cfg.model.primary = env.INSTINCT_MODEL.trim();
+  if (env.INSTINCT_AGENT_NAME?.trim()) cfg.agent.name = env.INSTINCT_AGENT_NAME.trim();
+  if (enabled(env.INSTINCT_AGENT_PUBLIC)) cfg.agent.public = true;
   return cfg;
 }
 
