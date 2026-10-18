@@ -6,8 +6,8 @@
  * default. It binds 0.0.0.0 only when the environment says this is a container
  * (PORT injected by Maritime or set by docker-compose, or MARITIME_* present) or
  * when INSTINCT_BIND asks for it. The Inkbox tunnel never points at that
- * listener: it forwards to a second, loopback-only server that serves /health
- * and /webhooks/inkbox and nothing else.
+ * listener: it forwards to a second, loopback-only server that serves /health,
+ * /webhooks/inkbox and the read-only proof verifier, and nothing else.
  */
 import type http from "node:http";
 import { Inkbox } from "@inkbox/sdk";
@@ -45,7 +45,7 @@ async function main(): Promise<void> {
   if (env.INSTINCT_TUNNEL === "1" && env.INKBOX_API_KEY) {
     tunnelServer = await listenTunnelServer(app, httpOpts);
     const tunnelPort = (tunnelServer.address() as { port: number }).port;
-    log(`tunnel listener on 127.0.0.1:${tunnelPort} (webhooks only)`);
+    log(`tunnel listener on 127.0.0.1:${tunnelPort} (health, webhooks, verifier)`);
     closeTunnel = await startTunnel(tunnelPort, app.state).catch((err: Error) => {
       log(`tunnel not started: ${err.message}`);
       return undefined;
@@ -91,7 +91,7 @@ async function startTunnel(port: number, state: Awaited<ReturnType<typeof boot>>
   // and an undriven listener advertises a public URL while staying silent, so
   // Inkbox deliveries are logged against the tunnel and never arrive.
   driveTunnel(listener, (message) => log(`tunnel runtime stopped: ${message}`));
-  log(`tunnel up: ${listener.publicUrl} (serves /health and /webhooks/inkbox only)`);
+  log(`tunnel up: ${listener.publicUrl} (serves /health, /webhooks/inkbox and /verify only)`);
 
   if (env.INKBOX_ADMIN_API_KEY) {
     try {
