@@ -54,7 +54,24 @@ Deployed and exercised on Preprod (public testnet) on 2026-10-16:
 | `memory-vault` | `6e9d608a997d5642564cbaea2b0a93a45fae0b806ee5fb68e8e0b008c2f19f7f` |
 | `allowance-registry` | `fd4bfac0d1ae522793050401ee9021bc7dfe27767745f5a3e954d15895d4afb1` |
 
-Three commands, no keys and no wallet, straight from a fresh clone:
+### Text the live agent
+
+The agent is deployed from this repository: it runs on a VM with no laptop
+attached, reachable over iMessage and email. Text `connect @sealai` to
+**+16504849720**, or email `sealai@inkboxmail.com`, then:
+
+1. Ask it to remember something.
+2. Ask it to prove a fact about that memory. The text stays on the host; the reply
+   carries an attestation id.
+3. Check that id yourself, with no wallet: `instinct midnight verify <attestationId>`.
+
+The VM sleeps when idle, so a message can land while it is asleep. Every delivery
+is logged and replayable (`inkbox webhook delivery list`, then
+`inkbox webhook delivery replay <delivery-id>`), so no message is lost.
+
+### Straight from a fresh clone
+
+Three commands, no keys and no wallet:
 
 ```bash
 pnpm install && pnpm build

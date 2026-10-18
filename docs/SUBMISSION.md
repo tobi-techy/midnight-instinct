@@ -141,8 +141,8 @@ file the agent could talk its way around.
 
 - Contracts compile with the Midnight Compact toolchain 0.31.1 (language 0.23):
   `pnpm run contracts:check`.
-- **962 tests across 10 packages**: core 226, apps 147, inkbox 141, server 101,
-  cli 84, payments 66, network 65, gateway 57, computer 43, midnight 32. Plus
+- **972 tests across 10 packages**: core 226, apps 147, inkbox 141, server 101,
+  cli 84, gateway 67, payments 66, network 65, computer 43, midnight 32. Plus
   **13 Compact-runtime simulator tests** (`deploy/midnight-devnet`, 2 files) and
   an indexer-backed end-to-end check.
 - The agent's own client drives the chain through the REST adapter:
