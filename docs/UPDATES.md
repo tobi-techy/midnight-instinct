@@ -172,7 +172,16 @@ platform limits shape it, both verified on the account:
 - the free plan allows **3 agents and 1 awake machine**. Waking the second agent
   returned `200` and put the primary to sleep, and starting the primary while the
   second was awake returned `429`. One agent is awake at a time, so the demo agent
-  is woken before a judged window and the owner's agent sleeps meanwhile.
+  is woken before a judged window and the owner's agent sleeps meanwhile:
+
+  ```
+  curl -s -X POST -H "Authorization: Bearer $MARITIME_API_KEY" \
+    https://api.maritime.sh/api/agents/<guest agent id>/start
+  ```
+
+  A message that arrives while an agent is asleep does not reach it: the delivery
+  records `502`. Replay it after the wake with `inkbox webhook delivery list`
+  then `inkbox webhook delivery replay <delivery-id>`.
 - creating an identity needs either an Inkbox **org admin key** (the Inkbox
   Console can mint one) or the **agent self-signup** flow, which needs no key and
   only a human confirming a code by email. An identity-scoped key gets `403` on
