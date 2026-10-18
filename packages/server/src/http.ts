@@ -9,13 +9,15 @@
  * network: main.ts binds loopback unless a container env says otherwise, and a
  * Maritime VM only exposes /chat through Maritime's own authenticated API. The
  * Inkbox tunnel never reaches this surface: it forwards to a second listener
- * built with `tunnelOnly: true`, which serves /health and /webhooks/inkbox only.
+ * built with `tunnelOnly: true`, which serves /health, /webhooks/inkbox and the
+ * read-only /verify/<attestationId> only.
  */
 import http from "node:http";
 import { randomUUID, timingSafeEqual } from "node:crypto";
 import { decodeEvent } from "@open-instinct/core";
 import type { AgentRuntime, HandleResult, InboundMessage, InstinctConfig, OutboundMessage, ScheduleEntry, Scheduler, StateDir } from "@open-instinct/core";
 import { DurableInbox, parseInkboxEvent, verifyInkboxSignature } from "@open-instinct/inkbox";
+import type { VerifyResult } from "@open-instinct/midnight";
 
 /** Replies the console outbox is holding for a chat conversation. */
 export interface ChatBuffer {
@@ -33,6 +35,9 @@ export interface WalletCallback {
   authorizeUrl?(): { url: string; state: string };
 }
 
+/** Checks one attestation against the ledger. Present when the Midnight layer is on. */
+export type MidnightVerifier = (attestationId: string) => Promise<VerifyResult>;
+
 /** The slice of a boot() result the HTTP layer needs. Tests pass stubs. */
 export interface HttpApp {
   state?: StateDir;
@@ -47,6 +52,12 @@ export interface HttpApp {
    * reports the current anchor and proof counts, not the boot-time ones.
    */
   midnightStatus?: () => { mode: string; contractAddress?: string; commitments: number; attestations: number; allowances: number };
+  /**
+   * The public verifier: anyone with an attestation id can ask whether it is recorded
+   * and which single category it disclosed. No secrets, no writes, so it is the one
+   * route the tunnel exposes besides /health and the Inkbox webhook.
+   */
+  midnightVerify?: MidnightVerifier;
   startedAt?: number;
   modelSpec?: string;
   /** Set when the outbox buffers chat replies (ConsoleOutbox or the chat-aware Inkbox wrapper). */
@@ -80,6 +91,14 @@ export interface HttpServerOptions {
 export const BODY_LIMIT_BYTES = 1024 * 1024;
 export const CHAT_TOKEN_HEADER = "x-instinct-token";
 export const TUNNEL_ROUTES: ReadonlySet<string> = new Set(["GET /health", "POST /webhooks/inkbox"]);
+/** `/verify/<attestationId>`: one 64-hex id, so a link is both unguessable and bounded. */
+export const VERIFY_PATH = /^\/verify\/([0-9a-f]{64})$/i;
+
+/** The read-only verifier the public tunnel may reach, next to health and the webhook. */
+export function isTunnelRoute(method: string, path: string): boolean {
+  if (TUNNEL_ROUTES.has(`${method} ${path}`)) return true;
+  return method === "GET" && VERIFY_PATH.test(path);
+}
 /** A Maritime schedule wake may arrive a little before the minute boundary we computed. */
 export const SCHEDULE_WAKE_GRACE_MS = 90_000;
 /** Envelope event type the gateway relays when Link redirects to its callback URL. */
@@ -301,9 +320,13 @@ export function createHttpServer(app: HttpApp, opts: HttpServerOptions = {}): ht
     const method = req.method ?? "GET";
     const path = url.pathname.replace(/\/+$/, "") || "/";
 
-    if (tunnelOnly && !TUNNEL_ROUTES.has(`${method} ${path}`)) return sendJson(res, 404, { error: "not found" });
+    if (tunnelOnly && !isTunnelRoute(method, path)) return sendJson(res, 404, { error: "not found" });
 
     if (method === "GET" && path === "/health") return sendJson(res, 200, { ok: true });
+
+    // A proof is public by construction: the verifier learns what the prover disclosed
+    // and nothing else, so this route is open to the network, not just the owner.
+    if (method === "GET" && VERIFY_PATH.test(path)) return verifyProof(path, req, res);
 
     if (method === "POST" && path === "/webhooks/inkbox") {
       const key = signingKey();
@@ -361,6 +384,29 @@ export function createHttpServer(app: HttpApp, opts: HttpServerOptions = {}): ht
     }
 
     sendJson(res, 404, { error: "not found" });
+  }
+
+  /**
+   * The public proof verifier. A browser gets a page; everything else gets the same facts
+   * as JSON. An id that was never anchored answers `valid: false` rather than an error:
+   * "I do not know this proof" is a result, not a failure.
+   */
+  async function verifyProof(path: string, req: http.IncomingMessage, res: http.ServerResponse): Promise<void> {
+    const attestationId = (VERIFY_PATH.exec(path)?.[1] ?? "").toLowerCase();
+    if (!app.midnightVerify) {
+      return sendJson(res, 503, { error: "this agent has no Midnight layer configured, so it has no proofs to verify" });
+    }
+    let result: VerifyResult;
+    try {
+      result = await app.midnightVerify(attestationId);
+    } catch (err) {
+      log(`verify failed: ${(err as Error).message}`);
+      return sendJson(res, 502, { error: "could not reach the ledger", detail: (err as Error).message });
+    }
+    if ((req.headers.accept ?? "").includes("text/html")) {
+      return sendHtml(res, result.valid ? 200 : 404, verifyPage({ attestationId, result, agentName: app.config.agent.name, ownerName: app.config.owner.name }));
+    }
+    return sendJson(res, result.valid ? 200 : 404, result);
   }
 
   async function linkCallback(url: URL, res: http.ServerResponse): Promise<void> {
@@ -457,5 +503,51 @@ export function linkPage(message: string): string {
     "<title>Open Instinct</title><style>body{font:16px/1.5 system-ui,sans-serif;margin:0;padding:48px 16px;color:#111;background:#fff}" +
     "main{max-width:420px;margin:0 auto}h1{font-size:20px;margin:0 0 12px}</style></head>" +
     `<body><main><h1>Link</h1><p>${safe}</p></main></body></html>`
+  );
+}
+
+/**
+ * The page a judge opens from a chat reply. Everything a proof reveals and nothing else:
+ * whether the attestation is recorded, which single category it disclosed, and that it is
+ * single-use. No scripts, no external assets, every value escaped.
+ */
+export function verifyPage(input: { attestationId: string; result: VerifyResult; agentName: string; ownerName: string }): string {
+  const { attestationId, result } = input;
+  const escape = (text: string): string => text.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c] ?? c);
+  const reveals = result.disclosed === 0 ? "Only that a memory exists. No category, no text." : `One category: ${result.disclosedLabel}`;
+  const mode =
+    result.mode === "mock"
+      ? "mock: this agent anchors locally, so the commitment is a real hash but no transaction was submitted for it."
+      : `${result.mode}: the commitment and the proof are transactions on the Midnight chain.`;
+  const rows: Array<[string, string]> = [
+    ["Reveals", escape(reveals)],
+    ["Single use", result.valid ? "yes, this id cannot be proved again" : "n/a"],
+    ["Mode", escape(mode)],
+  ];
+  if (result.contractAddress) rows.push(["Contract", `<code>${escape(result.contractAddress)}</code>`]);
+  const explain = result.valid
+    ? "The memory's text never left the agent's host. This page asked the ledger whether this attestation is recorded, and read back only what it disclosed."
+    : "This id is not on the ledger. Either it was never anchored, it belongs to another deployment, or it was mistyped. Ask the agent for a fresh proof and use the id exactly as it sent it.";
+  return (
+    "<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\">" +
+    `<title>${escape(input.agentName)} proof verifier</title>` +
+    "<style>body{font:16px/1.55 system-ui,sans-serif;margin:0;padding:40px 16px;color:#111;background:#fafafa}" +
+    "main{max-width:560px;margin:0 auto;background:#fff;border:1px solid #e5e5e5;border-radius:12px;padding:28px}" +
+    "h1{font-size:20px;margin:0 0 4px}.status{font-size:15px;font-weight:600;margin:16px 0 20px;padding:12px 14px;border-radius:8px}" +
+    ".ok{background:#eefbf1;color:#12622c;border:1px solid #b7e4c4}.bad{background:#fdf0ef;color:#7a1c14;border:1px solid #f0c2bd}" +
+    "dl{display:grid;grid-template-columns:120px 1fr;gap:8px 16px;margin:0 0 18px}dt{color:#666}dd{margin:0}" +
+    "p{color:#333}code{font:13px/1.4 ui-monospace,SFMono-Regular,Menlo,monospace;word-break:break-all}" +
+    "footer{color:#888;font-size:13px;margin-top:22px}</style></head><body><main>" +
+    `<h1>${escape(input.agentName)} proof verifier</h1>` +
+    `<div>Hosted by ${escape(input.ownerName)}'s agent, built on Open Instinct with Midnight.</div>` +
+    `<p class="status ${result.valid ? "ok" : "bad"}">${result.valid ? "Proof verified" : "No proof found for this id"}</p>` +
+    "<dl>" +
+    rows.map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join("") +
+    `<dt>Attestation</dt><dd><code>${escape(attestationId)}</code></dd>` +
+    "</dl>" +
+    `<p>${escape(explain)}</p>` +
+    (result.verifyUrl ? `<p><a href="${escape(result.verifyUrl)}">Open the same check on the proof server</a></p>` : "") +
+    "<footer>docs/MIDNIGHT.md in the repository explains the commitment scheme, the circuit and this verifier.</footer>" +
+    "</main></body></html>"
   );
 }

@@ -41,6 +41,7 @@ import {
   midnightTools,
   type MidnightStatus,
   type PersistedState,
+  type VerifyResult,
 } from "@open-instinct/midnight";
 import { networkTools } from "@open-instinct/network";
 import { ChatAwareOutbox, ConsoleOutbox, type ChatReplyBuffer } from "./console-outbox.js";
@@ -80,6 +81,11 @@ export interface BootResult {
    * agent works, and GET / and GET /midnight/status must report the current ones.
    */
   midnightStatus?: () => MidnightStatus;
+  /**
+   * Checks one attestation id against the ledger, for anyone who has the id. Same answer
+   * in mock and on chain, so `GET /verify/<id>` works before a contract is deployed.
+   */
+  midnightVerify?: (attestationId: string) => Promise<VerifyResult>;
   startedAt: number;
   modelSpec: string;
   /** Finished chat replies waiting for the next /chat on their conversation. */
@@ -211,6 +217,7 @@ export async function boot(env: NodeJS.ProcessEnv, opts: BootOptions = {}): Prom
         shielded,
         // A public demo agent opens the vault to a guest, in the guest's own scope.
         publicMode: config.agent.public === true,
+        ...(midnightCfg.verifyBaseUrl ? { verifyUrl: midnightCfg.verifyBaseUrl } : {}),
         auditAppend: (entry) => audit.append(entry),
       }),
     );
@@ -219,6 +226,7 @@ export async function boot(env: NodeJS.ProcessEnv, opts: BootOptions = {}): Prom
       midnightGuidance({
         mode: midnightStatus.mode,
         ...(midnightCfg.contractAddress ? { contractAddress: midnightCfg.contractAddress } : {}),
+        ...(midnightCfg.verifyBaseUrl ? { verifyUrl: midnightCfg.verifyBaseUrl } : {}),
         commitments: midnightStatus.commitments,
       }),
     );
@@ -406,6 +414,7 @@ export async function boot(env: NodeJS.ProcessEnv, opts: BootOptions = {}): Prom
     apps,
     appsConnected,
     ...(midnightClient ? { midnightStatus: () => midnightClient.status() } : {}),
+    ...(midnightClient ? { midnightVerify: (attestationId: string) => midnightClient.verify({ attestationId }) } : {}),
     startedAt,
     modelSpec,
     chatBuffer,

@@ -14,7 +14,7 @@ import { AuditLog, ContactStore, encodeEvent, resolvePrincipal } from "@open-ins
 import type { InboundMessage, OutboundMessage, Outbox, Principal } from "@open-instinct/core";
 import { encodeOip } from "@open-instinct/network";
 import { boot } from "./boot.js";
-import { closeInkboxInbox, createHttpServer } from "./http.js";
+import { closeInkboxInbox, createHttpServer, listenTunnelServer } from "./http.js";
 
 const OWNER_PHONE = "+15550001111";
 const STRANGER_PHONE = "+15559998888";
@@ -285,6 +285,53 @@ async function main(): Promise<void> {
       const midnightState = existsSync(midnightFile) ? (JSON.parse(readFileSync(midnightFile, "utf8")) as { commitments?: Record<string, { scope?: string }> }) : {};
       const commitments = Object.values(midnightState.commitments ?? {});
       check(commitments.length === 1 && Boolean(commitments[0]?.scope), `one scoped commitment is on record (got ${JSON.stringify(commitments)})`);
+
+      // The guest asks for a proof, then anyone checks it over the public tunnel surface.
+      const commitment = Object.keys(midnightState.commitments ?? {})[0] ?? "";
+      check(/^[0-9a-f]{64}$/.test(commitment), `the commitment is 64 hex (got ${commitment})`);
+      faux.setResponses([
+        fauxAssistantMessage([fauxToolCall("vault_prove_reveal", { commitment, disclose: "existence" })], { stopReason: "toolUse" }),
+        fauxAssistantMessage("Proved. Here is the whole attestation id."),
+      ]);
+      const proofEvent = {
+        ...event,
+        id: "evt_smoke_guest_2",
+        data: {
+          ...event.data,
+          message: { ...event.data.message, id: "msg_smoke_guest_2", conversation_id: "conv_guest", remote_number: GUEST_PHONE, content: "Prove you remembered, without telling me what it says." },
+        },
+      };
+      const beforeProof = guestOutbox.sent.length;
+      const proofRes = await fetch(`${guestBase}/chat`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ message: encodeEvent(proofEvent), source: "front_door", conversation_id: "conv_guest" }),
+      });
+      check(proofRes.status === 200, `the guest's second envelope is accepted (got ${proofRes.status})`);
+      await settle(() => guestOutbox.sent.length > beforeProof, 5000);
+      const midnightAfter = JSON.parse(readFileSync(midnightFile, "utf8")) as { nullifiers?: Record<string, { disclosed?: number }> };
+      const attestationId = Object.keys(midnightAfter.nullifiers ?? {})[0] ?? "";
+      check(/^[0-9a-f]{64}$/.test(attestationId), `the proof left a single-use attestation id (got ${attestationId})`);
+      check(Object.values(midnightAfter.nullifiers ?? {})[0]?.disclosed === 0, "the attestation discloses bare existence and no category");
+
+      // The Inkbox tunnel reaches a second, loopback-only listener. The verifier is the
+      // one read-only route on it besides /health and the webhook.
+      const tunnel = await listenTunnelServer(guest, { signingKey: "smoke-signing-key", env: guestEnv, logger: quiet });
+      const tunnelBase = `http://127.0.0.1:${(tunnel.address() as AddressInfo).port}`;
+      try {
+        const verified = await fetch(`${tunnelBase}/verify/${attestationId}`);
+        const verifiedJson = (await verified.json()) as { valid?: boolean; disclosed?: number; singleUse?: boolean; mode?: string };
+        check(verified.status === 200, `the public verifier answers 200 for the id (got ${verified.status})`);
+        check(verifiedJson.valid === true && verifiedJson.disclosed === 0 && verifiedJson.singleUse === true, `the verifier reports a valid, single-use, bare-existence proof (got ${JSON.stringify(verifiedJson)})`);
+        check(verifiedJson.mode === "mock", `the verifier reports the mode honestly (got ${verifiedJson.mode})`);
+        const page = await fetch(`${tunnelBase}/verify/${attestationId}`, { headers: { accept: "text/html" } });
+        const html = await page.text();
+        check(page.status === 200 && html.includes("Proof verified") && html.includes(attestationId), "a browser gets a readable verification page");
+        check((await fetch(`${tunnelBase}/status`)).status === 404, "the tunnel still hides the owner's surface");
+        check((await fetch(`${tunnelBase}/verify/${"a".repeat(64)}`)).status === 404, "an unknown id is reported as no proof, not as an error");
+      } finally {
+        await new Promise<void>((resolve) => tunnel.close(() => resolve()));
+      }
       const guestPrincipal = resolvePrincipal(
         { id: "msg_smoke_guest_1", conversationKey: "imessage:conv_guest", text: "hi", from: GUEST_PHONE, channel: "imessage", replyRef: {}, receivedAt: new Date().toISOString() } as InboundMessage,
         guest.config,

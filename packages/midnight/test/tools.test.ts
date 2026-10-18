@@ -24,7 +24,7 @@ function failed(result: unknown): boolean {
   return (result as { isError?: boolean }).isError === true;
 }
 
-function harness(opts: { publicMode?: boolean } = {}) {
+function harness(opts: { publicMode?: boolean; verifyUrl?: string } = {}) {
   const dir = mkdtempSync(join(tmpdir(), "midnight-tools-"));
   const state = new StateDir(dir);
   state.ensure();
@@ -39,7 +39,7 @@ function harness(opts: { publicMode?: boolean } = {}) {
     },
   });
   const shielded = new ShieldedMemory({ inner, client, principalId: "owner" });
-  const tools = midnightTools({ client, shielded, publicMode: opts.publicMode === true });
+  const tools = midnightTools({ client, shielded, publicMode: opts.publicMode === true, ...(opts.verifyUrl ? { verifyUrl: opts.verifyUrl } : {}) });
   const tool = (name: string) => tools.find((t) => t.spec.name === name)!.spec;
   const ctx = (principal: Principal): ToolContext => ({ principal, conversationKey: "imessage:guest", channel: "imessage", now: () => new Date("2026-10-18T12:00:00Z") });
   return { inner, tool, ctx, cleanup: () => rmSync(dir, { recursive: true, force: true }) };
@@ -80,6 +80,20 @@ describe("vault tools for a guest on a public demo agent", () => {
       expect(failed(denied)).toBe(true);
       expect(textOf(denied)).toContain("another vault scope");
       expect(textOf(denied)).not.toContain("attestation");
+    } finally {
+      h.cleanup();
+    }
+  });
+
+  it("points at the agent's own public verifier when it has one, whole id included", async () => {
+    const h = harness({ publicMode: true, verifyUrl: "https://sealai.inkboxwire.com/" });
+    try {
+      const committed = await h.tool("vault_commit").execute({ text: "travels with a small dog", category: "other" }, h.ctx(GUEST));
+      const proof = await h.tool("vault_prove_reveal").execute({ commitment: commitmentIn(textOf(committed)) }, h.ctx(GUEST));
+      const text = textOf(proof);
+      const id = /Attestation id ([0-9a-f]{64}) is single-use/.exec(text)?.[1] ?? "";
+      expect(failed(proof)).toBe(false);
+      expect(text).toContain(`Anyone can check it themselves at https://sealai.inkboxwire.com/verify/${id}`);
     } finally {
       h.cleanup();
     }

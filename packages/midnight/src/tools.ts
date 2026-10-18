@@ -18,6 +18,11 @@ export interface MidnightToolDeps {
   shielded: ShieldedMemory;
   /** True on a public demo agent: unknown senders may use the vault in their own scope. */
   publicMode?: boolean;
+  /**
+   * Public base URL the agent is reachable at (its Inkbox tunnel host). When set, a proof
+   * reply carries a link anyone can open to check the attestation themselves.
+   */
+  verifyUrl?: string;
   auditAppend?: (entry: { kind: "policy"; conversationKey?: string; principal?: string; detail: Record<string, unknown> }) => void;
   now?: () => Date;
 }
@@ -93,7 +98,10 @@ export function midnightTools(deps: MidnightToolDeps): RegisteredTool[] {
       try {
         const proof = await client.prove({ commitment, scope, ...(disclose ? { disclose } : {}) });
         deps.auditAppend?.({ kind: "policy", conversationKey: ctx.conversationKey, principal: ctx.principal.id, detail: { tool: "vault_prove_reveal", attestationId: proof.attestationId, disclosed: proof.disclosed, txHash: proof.txHash, mode: proof.mode } });
-        const link = proof.explorerUrl ? `\nVerify: ${proof.explorerUrl}` : "";
+        const links: string[] = [];
+        if (deps.verifyUrl) links.push(`Anyone can check it themselves at ${deps.verifyUrl.replace(/\/+$/, "")}/verify/${proof.attestationId}`);
+        if (proof.explorerUrl) links.push(`Transaction: ${proof.explorerUrl}`);
+        const link = links.length > 0 ? `\n${links.join("\n")}` : "";
         return textResult(
           `Proof recorded on Midnight (tx ${proof.txHash}, mode ${proof.mode}). The verifier learns only this: ${proof.disclosedLabel} (${proof.disclosed === 0 ? "bare existence, no category" : `category code ${proof.disclosed}`}). Attestation id ${proof.attestationId} is single-use and cannot be replayed. Hand the whole id over so the other side can verify it themselves.${link}`,
         );

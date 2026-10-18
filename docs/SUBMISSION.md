@@ -19,7 +19,7 @@ Everything the buildathon asked for is new in this fork:
 |---|---|
 | Two Compact contracts. `memory-vault` holds opaque commitments and selective-disclosure attestations; `allowance-registry` holds owner-bound spend limits enforced by a circuit | `contracts/` |
 | The agent-facing Midnight client, its tools and its private-state plumbing | `packages/midnight/` |
-| Verifier path: `POST /verify` and `GET /verify/<attestationId>`. Anyone checks a proof against the ledger with no wallet, no seed and no cooperation from the agent. A verifier can also hand the prover a challenge so a proof cannot be replayed for a different one | `deploy/midnight-devnet/src/adapter.ts`, `packages/midnight/src/client.ts`, `instinct midnight verify` |
+| Verifier path: `POST /verify` and `GET /verify/<attestationId>` on the adapter, and the agent's own read-only `GET /verify/<attestationId>` published through its tunnel, so a judge opens the link from a chat reply in a browser. Anyone checks a proof against the ledger with no wallet, no seed and no cooperation from the agent. A verifier can also hand the prover a challenge so a proof cannot be replayed for a different one | `deploy/midnight-devnet/src/adapter.ts`, `packages/midnight/src/client.ts`, `packages/server/src/http.ts`, `instinct midnight verify` |
 | Allowance gate: `/allowance/check` plus a runtime check before every gated action (`purchase`, `travel.book`, `computer.use`, `apps.use`, `network.ask`) that fails closed when the ledger cannot be reached | `packages/core/src/runtime.ts`, `packages/core/src/policy.ts`, `packages/server/` |
 | Preprod sync fix: the SDK pinned `shouldRetry: () => false`, so one dropped indexer socket was permanently fatal, and because wallet state is written only after a completed sync, every restart began again at genesis. An idempotent patch restores reconnect with a widened predicate, and progress, stall and checkpoint logging make a 17-hour first sync resumable | `deploy/midnight-devnet/scripts/patch-wallet-sdk.mjs`, `src/diagnostics.ts`, `src/progress.ts` |
 | The LLM API gateway as a first-class model provider | `packages/core/src/model.ts`, `packages/server/src/boot.ts` |
@@ -143,8 +143,8 @@ file the agent could talk its way around.
 
 - Contracts compile with the Midnight Compact toolchain 0.31.1 (language 0.23):
   `pnpm run contracts:check`.
-- **996 tests across 10 packages**: core 233, apps 147, inkbox 149, server 101,
-  cli 84, gateway 67, payments 66, network 65, computer 43, midnight 41. Plus
+- **1008 tests across 10 packages**: core 233, apps 147, inkbox 149, server 108,
+  cli 84, gateway 67, payments 66, network 65, computer 43, midnight 46. Plus
   **13 Compact-runtime simulator tests** (`deploy/midnight-devnet`, 2 files) and
   an indexer-backed end-to-end check.
 - The agent's own client drives the chain through the REST adapter:
@@ -159,7 +159,7 @@ file the agent could talk its way around.
 | Criterion | Where it shows |
 |---|---|
 | Engineering & implementation | `contracts/` (two Compact contracts, private state, `disclose()` boundaries), `packages/midnight/`, the adapter, the verifier path; genuine private state in `witnesses.ts` |
-| Quality assurance & reliability | 962 tests plus 13 simulator tests and an indexer-backed e2e check; the sync fix and its diagnostic layer, proven by the 17-hour Preprod run |
+| Quality assurance & reliability | 1008 tests plus 13 simulator tests and an indexer-backed e2e check; the sync fix and its diagnostic layer, proven by the 17-hour Preprod run |
 | Product & vision | a working agent, not a demo dApp; commit, prove, verify, spend is a coherent story |
 | User experience & design | the primary UX is iMessage; a web console proves the same model visually |
 | Communication | `docs/MIDNIGHT.md`, `ARCH-MIDNIGHT.md`, `PRIVACY-MODEL.md`, this brief |

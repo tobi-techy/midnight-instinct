@@ -66,9 +66,12 @@ trusted as a verified Inkbox event. So they are guarded twice.
 
 The Inkbox tunnel never exposes this surface. With `INSTINCT_TUNNEL=1` the server starts a
 second, loopback-only listener (`listenTunnelServer`, `tunnelOnly: true`) that answers
-`GET /health` and `POST /webhooks/inkbox` and returns `404` for everything else, and points
-the tunnel at that. The public `https://<handle>.inkboxwire.com` URL therefore reaches
-signed webhooks only. CLI and gateway code that runs its own tunnel should do the same.
+`GET /health`, `POST /webhooks/inkbox` and the read-only `GET /verify/<attestationId>` and
+returns `404` for everything else, and points the tunnel at that. The public
+`https://<handle>.inkboxwire.com` URL therefore reaches signed webhooks and the proof
+verifier — a proof reveals only what its prover disclosed, so the link is safe to hand a
+stranger — and nothing of the owner's. CLI and gateway code that runs its own tunnel should
+do the same.
 
 ### Schedule wakes
 

@@ -28,6 +28,12 @@ export interface MidnightEnv {
   allowanceAddress?: string;
   /** Block explorer base URL for tx links, e.g. https://explorer.midnight.network. */
   explorerUrl?: string;
+  /**
+   * Public base URL this agent is reachable at (`MIDNIGHT_VERIFY_URL`), normally its
+   * Inkbox tunnel host. Proof replies then carry `<base>/verify/<id>`, the agent's own
+   * read-only verifier, so a human can check the attestation without the CLI.
+   */
+  verifyBaseUrl?: string;
 }
 
 /**
@@ -41,6 +47,7 @@ export function midnightEnv(env: NodeJS.ProcessEnv): MidnightEnv | undefined {
   const allowanceAddress = env.MIDNIGHT_ALLOWANCE_ADDRESS?.trim() || undefined;
   const proofUrl = env.MIDNIGHT_PROOF_URL?.trim().replace(/\/+$/, "") || undefined;
   const explorerUrl = env.MIDNIGHT_EXPLORER_URL?.trim().replace(/\/+$/, "") || undefined;
+  const verifyBaseUrl = env.MIDNIGHT_VERIFY_URL?.trim().replace(/\/+$/, "") || undefined;
   if (!rawMode && !contractAddress) return undefined;
   let mode: MidnightMode = "mock";
   if (rawMode === "local" || rawMode === "testnet") mode = rawMode;
@@ -51,6 +58,7 @@ export function midnightEnv(env: NodeJS.ProcessEnv): MidnightEnv | undefined {
     ...(contractAddress ? { contractAddress } : {}),
     ...(allowanceAddress ? { allowanceAddress } : {}),
     ...(explorerUrl ? { explorerUrl } : {}),
+    ...(verifyBaseUrl ? { verifyBaseUrl } : {}),
   };
 }
 

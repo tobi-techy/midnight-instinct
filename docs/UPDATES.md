@@ -99,9 +99,9 @@ was required for an identity that already exists; that documentation bug is fixe
 
 ## 8. Quality
 
-- **996 tests pass across 10 packages, 0 failures** (verified 2026-10-18): core
-  233, apps 147, inkbox 149, server 101, cli 84, gateway 67, payments 66, network
-  65, computer 43, midnight 41. Plus the 13 Compact-runtime simulator tests and
+- **1008 tests pass across 10 packages, 0 failures** (verified 2026-10-18): core
+  233, apps 147, inkbox 149, server 108, cli 84, gateway 67, payments 66, network
+  65, computer 43, midnight 46. Plus the 13 Compact-runtime simulator tests and
   an indexer-backed end-to-end check in `deploy/midnight-devnet`.
 - **CI is green on `main`**: `ci`, `secret-scan` and `build-images`. Both
   Dockerfiles were silently broken — they omitted the `packages/midnight`
@@ -210,6 +210,35 @@ The end-to-end smoke test covers the guest path with the vault wired in mock mod
 guest's note is anchored, `midnight.json` holds one scoped commitment, `MEMORY.md` stays
 clean, and the guest's prompt lists `vault.write` but not `memory.write`.
 
+## 11. A verifier link a judge can click
+
+The verifier already existed as a CLI command and as the adapter's `GET /verify/<id>` at
+`127.0.0.1:6400` — useful to us, invisible to anyone else. The agent now serves the read
+itself:
+
+- `GET /verify/<attestationId>` on the agent, next to `/health`. A browser gets a page: what
+  the id is, whether the ledger holds it, which single category it disclosed, that it is
+  single-use, and the mode it ran in. Anything else gets the same facts as JSON. An unknown
+  id is `valid: false` with a `404` rather than an error, and an id that is not 64 hex never
+  reaches the ledger.
+- The route is one of the three the Inkbox tunnel exposes (`isTunnelRoute`), so
+  `https://<handle>.inkboxwire.com/verify/<id>` works from any browser. This is safe by
+  construction: verifying a proof reveals only what the prover chose to disclose. `/chat`,
+  `/status`, `/schedules`, `/midnight/status` and the OAuth callbacks still answer `404` on
+  the tunnel listener, which the smoke test asserts.
+- `MIDNIGHT_VERIFY_URL` (the agent's tunnel host) puts the link in the proof reply next to
+  the attestation id, and the Midnight guidance tells the model to hand over both. Without
+  it, replies carry the bare id exactly as before.
+
+Honest about what it proves: in `mock` mode the commitment is a real sha256 and the
+nullifier is real, but no transaction was submitted, so the page says so in as many words.
+On `local`/`testnet` the page is a read through the adapter to the ledger. Either way the
+plaintext never leaves the host.
+
+The smoke test now runs the whole loop: an unknown number commits a memory as a guest, asks
+for a proof, and the proof is then checked through the tunnel listener — JSON and page — with
+the owner's surface still hidden.
+
 ## How judges test the agent
 
 1. Text **`connect @sealai`** to the Inkbox router at **+16504849720** (or, to
@@ -217,8 +246,9 @@ clean, and the guest's prompt lists `vault.write` but not `memory.write`.
 2. Ask it to remember something, then ask it to prove a fact about that memory.
    The plaintext stays on the host; the reply is a proof reference you can check
    yourself.
-3. Verify a proof with no wallet: run `instinct midnight verify <attestationId>`
-   or read the public `GET /verify/<attestationId>`. A valid proof reports the
+3. Verify a proof with no wallet: open the link the reply gives you
+   (`https://sealai.inkboxwire.com/verify/<attestationId>`) or run
+   `instinct midnight verify <attestationId>`. A valid proof reports the
    disclosed category and that it is single-use; an unknown id reports invalid.
 
 Two caveats, stated plainly:
@@ -242,10 +272,10 @@ Two caveats, stated plainly:
    reconnect-on-wake to the tunnel client so a resumed VM re-establishes its
    tunnel by itself, and a wake-on-delivery path so an inbound message can wake
    the VM rather than being dropped.
-2. **The no-wallet web demo.** The read-only verifier is the most persuasive part
-   of this project and it needs no wallet: turn `GET /verify/<id>` plus the
-   adapter console into a hosted page that takes an attestation id and shows the
-   ledger check. That is what judges and future users will click.
+2. **The adapter console.** The agent hosts its own verifier now; what is still
+   missing is the browse-all surface — a page on the proof-server adapter that
+   lists recent attestations and their ledger state, for a judge who wants to
+   look around instead of pasting one id.
 3. **First beta users texting Seal.** Real people committing real memories, with
    the privacy model under load — the plaintext, the categories and the
    nullifiers as they behave outside a demo.

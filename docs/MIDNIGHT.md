@@ -195,6 +195,7 @@ export MIDNIGHT_MODE=mock          # or local / testnet
 export MIDNIGHT_PROOF_URL=...      # local + testnet
 export MIDNIGHT_CONTRACT_ADDRESS=0x...
 export MIDNIGHT_EXPLORER_URL=https://explorer.midnight.network
+export MIDNIGHT_VERIFY_URL=https://your-handle.inkboxwire.com   # the agent's own public verifier
 
 instinct midnight init             # seed the vault key
 instinct midnight status           # mode, contracts, counts
@@ -282,6 +283,22 @@ What this buys you:
 
 The same check is a plain HTTP call (`GET /verify/<id>`), so a relying party can
 integrate it without our code.
+
+### The agent's own verifier
+
+The agent serves that same read at `GET /verify/<attestationId>`, and it is the one
+route its public tunnel exposes besides `/health` and the Inkbox webhook — a proof is
+public by construction, so a verifier link is safe to hand a stranger, while `/chat`,
+`/status` and `/midnight/status` stay behind the token and answer `404` on the tunnel
+listener. A browser gets a page (what the id proves, which single category it
+disclosed, that it is single-use, and the mode it ran in); anything else gets JSON.
+An id that was never anchored answers `valid: false`, and an id that is not 64 hex
+is a `404` before the ledger is even consulted.
+
+Set `MIDNIGHT_VERIFY_URL` to the agent's public base URL (its tunnel host) and every
+proof reply carries `…/verify/<attestation id>`, so the person on the other end can
+check the proof in a browser without the CLI. With it unset, replies quote the bare
+id as before.
 
 To inspect a proof by hand:
 

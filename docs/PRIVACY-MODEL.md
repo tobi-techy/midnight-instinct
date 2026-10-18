@@ -68,7 +68,8 @@ boundary:
 - Witnesses: `deploy/midnight-devnet/src/witnesses.ts` (the vault's owner secret and the allowance registry's)
 - Off-chain semantics: `deploy/midnight-devnet/test/vault.sim.test.ts` (simulator)
 - Third-party verification: `packages/midnight/src/client.ts` (`verify()`), the
-  `instinct midnight verify` command, and `GET`/`POST /verify` on the adapter
+  `instinct midnight verify` command, `GET`/`POST /verify` on the adapter, and the
+  agent's own read-only `GET /verify/<attestationId>` behind its tunnel
 - Allowance gate: `spendGate` in `packages/core/src/runtime.ts`, wired in
   `packages/server/src/boot.ts`, backed by `MidnightClient.checkAllowance()`
 - Verifier tests: `packages/midnight/test/verify.test.ts`

@@ -6,8 +6,9 @@ import type { AddressInfo } from "node:net";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { encodeEvent, StateDir } from "@open-instinct/core";
 import type { HandleResult, InboundMessage, InstinctConfig, OutboundMessage, ScheduleEntry } from "@open-instinct/core";
-import { ACK_TEXT, CHAT_TOKEN_HEADER, LINK_CALLBACK_EVENT, createHttpServer, listenTunnelServer, matchScheduleEntry, type HttpApp } from "../src/http.js";
+import { ACK_TEXT, CHAT_TOKEN_HEADER, LINK_CALLBACK_EVENT, createHttpServer, listenTunnelServer, matchScheduleEntry, verifyPage, type HttpApp } from "../src/http.js";
 import { ChatReplyBuffer } from "../src/console-outbox.js";
+import type { VerifyResult } from "@open-instinct/midnight";
 
 const config: InstinctConfig = {
   version: 1,
@@ -564,6 +565,139 @@ describe("payments routes for the CLI", () => {
     } finally {
       await new Promise<void>((r) => server.close(() => r()));
     }
+  });
+});
+
+describe("proof verifier", () => {
+  const ID = `c91ebd08${"0".repeat(56)}`;
+  const seen: string[] = [];
+
+  function verifyApp(result: Partial<VerifyResult> = {}): Stub {
+    const app = stubApp();
+    app.midnightVerify = async (attestationId) => {
+      seen.push(attestationId);
+      const valid = result.valid ?? true;
+      return {
+        attestationId,
+        valid,
+        disclosed: result.disclosed ?? 0,
+        disclosedLabel: result.disclosedLabel ?? "nothing but existence",
+        singleUse: result.singleUse ?? true,
+        mode: result.mode ?? "mock",
+        reason: valid ? "recorded on the ledger" : "no such attestation",
+        ...result,
+      };
+    };
+    return app;
+  }
+
+  async function serve(app: Stub): Promise<{ base: string; close: () => Promise<void> }> {
+    const server = createHttpServer(app, { env: {} });
+    await new Promise<void>((r) => server.listen(0, "127.0.0.1", () => r()));
+    return { base: `http://127.0.0.1:${(server.address() as AddressInfo).port}`, close: () => new Promise((r) => server.close(() => r())) };
+  }
+
+  beforeEach(() => {
+    seen.length = 0;
+  });
+
+  it("answers JSON for anyone holding the id, with no token", async () => {
+    const { base, close } = await serve(verifyApp({ disclosed: 3, disclosedLabel: "health", mode: "testnet" }));
+    try {
+      const res = await fetch(`${base}/verify/${ID}`);
+      expect(res.status).toBe(200);
+      expect(await res.json()).toMatchObject({ attestationId: ID, valid: true, disclosed: 3, disclosedLabel: "health", singleUse: true, mode: "testnet" });
+      expect(seen).toEqual([ID]);
+    } finally {
+      await close();
+    }
+  });
+
+  it("returns 404 with valid:false for an id that was never anchored", async () => {
+    const { base, close } = await serve(verifyApp({ valid: false }));
+    try {
+      const res = await fetch(`${base}/verify/${ID}`);
+      expect(res.status).toBe(404);
+      expect(await res.json()).toMatchObject({ valid: false, attestationId: ID });
+    } finally {
+      await close();
+    }
+  });
+
+  it("renders a page for a browser, naming the disclosed category and the mode", async () => {
+    const { base, close } = await serve(verifyApp({ disclosed: 2, disclosedLabel: "finance", mode: "testnet", contractAddress: "0xabc" }));
+    try {
+      const res = await fetch(`${base}/verify/${ID}`, { headers: { accept: "text/html,application/xhtml+xml" } });
+      expect(res.status).toBe(200);
+      expect(res.headers.get("content-type")).toContain("text/html");
+      const html = await res.text();
+      expect(html).toContain("Proof verified");
+      expect(html).toContain(`<code>${ID}</code>`);
+      expect(html).toContain("finance");
+      expect(html).toContain("<code>0xabc</code>");
+      expect(html).toContain("the proof are transactions on the Midnight chain");
+    } finally {
+      await close();
+    }
+  });
+
+  it("does not call the verifier for an id that is not 64 hex, and 404s", async () => {
+    const { base, close } = await serve(verifyApp());
+    try {
+      for (const path of ["/verify/", "/verify/abc", `/verify/${ID}ff`, "/verify/zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz"]) {
+        expect((await fetch(`${base}${path}`)).status, path).toBe(404);
+      }
+      expect(seen).toEqual([]);
+    } finally {
+      await close();
+    }
+  });
+
+  it("says so plainly when the agent has no Midnight layer, and when the ledger is unreachable", async () => {
+    const bare = await serve(stubApp());
+    try {
+      expect((await fetch(`${bare.base}/verify/${ID}`)).status).toBe(503);
+    } finally {
+      await bare.close();
+    }
+    const app = stubApp();
+    app.midnightVerify = async () => {
+      throw new Error("adapter down");
+    };
+    const broken = await serve(app);
+    try {
+      expect((await fetch(`${broken.base}/verify/${ID}`)).status).toBe(502);
+    } finally {
+      await broken.close();
+    }
+  });
+
+  it("is reachable through the tunnel listener, next to health and the webhook", async () => {
+    const app = verifyApp();
+    const tunnel = await listenTunnelServer(app, { signingKey: SIGNING_KEY, env: {} });
+    const base = `http://127.0.0.1:${(tunnel.address() as AddressInfo).port}`;
+    try {
+      // The stub sets midnightVerify above, so this is the same handler the agent serves.
+      const res = await fetch(`${base}/verify/${ID}`);
+      expect(res.status).toBe(200);
+      expect(await res.json()).toMatchObject({ valid: true, attestationId: ID });
+      expect((await fetch(`${base}/status`)).status).toBe(404);
+      expect((await fetch(`${base}/midnight/status`)).status).toBe(404);
+    } finally {
+      await new Promise<void>((r) => tunnel.close(() => r()));
+    }
+  });
+
+  it("escapes what it prints", () => {
+    const html = verifyPage({
+      attestationId: ID,
+      agentName: "<Seal>",
+      ownerName: `O'Brien & <script>`,
+      result: { attestationId: ID, valid: true, disclosed: 0, disclosedLabel: "existence", singleUse: true, mode: "mock", reason: "ok" },
+    });
+    expect(html).toContain("&lt;Seal&gt;");
+    expect(html).toContain("O&#39;Brien &amp; &lt;script&gt;");
+    expect(html).not.toContain("<script>");
   });
 });
 

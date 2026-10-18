@@ -3,6 +3,8 @@ export interface MidnightGuidanceOptions {
   mode: string;
   contractAddress?: string;
   commitments: number;
+  /** Public verifier base URL, when the agent has one. */
+  verifyUrl?: string;
 }
 
 export function midnightGuidance(opts: MidnightGuidanceOptions): string {
@@ -14,5 +16,8 @@ export function midnightGuidance(opts: MidnightGuidanceOptions): string {
   else lines.push("- No memories anchored yet. The first vault_commit creates the first commitment.");
   lines.push("- Never paste memory plaintext into a proof description, an audit note, or a reply to anyone but the owner. Proofs disclose a category code or bare existence only.");
   lines.push("- Quote the attestation id from a proof so the other side can verify it themselves, and never claim a proof you did not run.");
+  if (opts.verifyUrl) {
+    lines.push(`- Your verifier is public: ${opts.verifyUrl.replace(/\/+$/, "")}/verify/<attestation id>. When you hand over a proof, give the whole id and this link, so the other side can check it without any tooling.`);
+  }
   return lines.join("\n");
 }
