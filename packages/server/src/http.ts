@@ -51,7 +51,7 @@ export interface HttpApp {
    * Midnight privacy layer status when configured. A getter so every request
    * reports the current anchor and proof counts, not the boot-time ones.
    */
-  midnightStatus?: () => { mode: string; contractAddress?: string; commitments: number; attestations: number; allowances: number };
+  midnightStatus?: () => { mode: string; contractAddress?: string; proofUrl?: string; commitments: number; attestations: number; allowances: number; latestAttestation?: string };
   /**
    * The public verifier: anyone with an attestation id can ask whether it is recorded
    * and which single category it disclosed. No secrets, no writes, so it is the one
@@ -93,11 +93,14 @@ export const CHAT_TOKEN_HEADER = "x-instinct-token";
 export const TUNNEL_ROUTES: ReadonlySet<string> = new Set(["GET /health", "POST /webhooks/inkbox"]);
 /** `/verify/<attestationId>`: one 64-hex id, so a link is both unguessable and bounded. */
 export const VERIFY_PATH = /^\/verify\/([0-9a-f]{64})$/i;
+/** The verifier's front door: a form, and a `?id=` hand-off for a pre-filled link. */
+export const VERIFY_INDEX_PATH = "/verify";
 
 /** The read-only verifier the public tunnel may reach, next to health and the webhook. */
 export function isTunnelRoute(method: string, path: string): boolean {
   if (TUNNEL_ROUTES.has(`${method} ${path}`)) return true;
-  return method === "GET" && VERIFY_PATH.test(path);
+  if (method !== "GET") return false;
+  return path === VERIFY_INDEX_PATH || VERIFY_PATH.test(path);
 }
 /** A Maritime schedule wake may arrive a little before the minute boundary we computed. */
 export const SCHEDULE_WAKE_GRACE_MS = 90_000;
@@ -326,6 +329,7 @@ export function createHttpServer(app: HttpApp, opts: HttpServerOptions = {}): ht
 
     // A proof is public by construction: the verifier learns what the prover disclosed
     // and nothing else, so this route is open to the network, not just the owner.
+    if (method === "GET" && path === VERIFY_INDEX_PATH) return verifyIndex(url, res);
     if (method === "GET" && VERIFY_PATH.test(path)) return verifyProof(path, req, res);
 
     if (method === "POST" && path === "/webhooks/inkbox") {
@@ -407,6 +411,31 @@ export function createHttpServer(app: HttpApp, opts: HttpServerOptions = {}): ht
       return sendHtml(res, result.valid ? 200 : 404, verifyPage({ attestationId, result, agentName: app.config.agent.name, ownerName: app.config.owner.name }));
     }
     return sendJson(res, result.valid ? 200 : 404, result);
+  }
+
+  /**
+   * The verifier's front door. `?id=<64 hex>` is a hand-off, so a reply or a slide can
+   * carry a pre-filled link; anything else prefills with this agent's newest attestation,
+   * which is always a proof a reader can actually check.
+   */
+  async function verifyIndex(url: URL, res: http.ServerResponse): Promise<void> {
+    const raw = (url.searchParams.get("id") ?? "").trim();
+    if (raw) {
+      const id = raw.replace(/^0x/i, "").toLowerCase();
+      if (!/^[0-9a-f]{64}$/.test(id)) {
+        return sendHtml(res, 400, verifyIndexPage({ agentName: app.config.agent.name, ownerName: app.config.owner.name, prefill: raw, error: "That is not an attestation id. It is 64 hexadecimal characters, exactly as the agent sent it." }));
+      }
+      res.writeHead(302, { location: `${VERIFY_INDEX_PATH}/${id}`, "cache-control": "no-store" });
+      res.end();
+      return;
+    }
+    const status = app.midnightStatus?.();
+    return sendHtml(res, 200, verifyIndexPage({
+      agentName: app.config.agent.name,
+      ownerName: app.config.owner.name,
+      prefill: status?.latestAttestation ?? "",
+      ...(status?.latestAttestation ? {} : { error: "No proof has been issued on this agent yet. Ask it to remember something and prove it, then paste the id it replies with." }),
+    }));
   }
 
   async function linkCallback(url: URL, res: http.ServerResponse): Promise<void> {
@@ -503,6 +532,36 @@ export function linkPage(message: string): string {
     "<title>Open Instinct</title><style>body{font:16px/1.5 system-ui,sans-serif;margin:0;padding:48px 16px;color:#111;background:#fff}" +
     "main{max-width:420px;margin:0 auto}h1{font-size:20px;margin:0 0 12px}</style></head>" +
     `<body><main><h1>Link</h1><p>${safe}</p></main></body></html>`
+  );
+}
+
+/**
+ * The verifier's front door: one text box, no scripts, no external assets. It is also the
+ * page a pre-filled link lands on before it hands the id to `/verify/<id>`.
+ */
+export function verifyIndexPage(input: { agentName: string; ownerName: string; prefill: string; error?: string }): string {
+  const escape = (text: string): string => text.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c] ?? c);
+  return (
+    "<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\">" +
+    `<title>${escape(input.agentName)} proof verifier</title>` +
+    "<style>body{font:16px/1.55 system-ui,sans-serif;margin:0;padding:40px 16px;color:#111;background:#fafafa}" +
+    "main{max-width:560px;margin:0 auto;background:#fff;border:1px solid #e5e5e5;border-radius:12px;padding:28px}" +
+    "h1{font-size:20px;margin:0 0 4px}label{display:block;margin:18px 0 6px;font-weight:600}" +
+    "input{width:100%;box-sizing:border-box;font:13px/1.4 ui-monospace,SFMono-Regular,Menlo,monospace;padding:10px;border:1px solid #ccc;border-radius:8px}" +
+    "button{margin-top:14px;font:inherit;font-weight:600;padding:10px 18px;border:0;border-radius:8px;background:#111;color:#fff;cursor:pointer}" +
+    "p{color:#333}.note{color:#666;font-size:14px}.bad{color:#7a1c14;font-weight:600}footer{color:#888;font-size:13px;margin-top:22px}</style></head>" +
+    "<body><main>" +
+    `<h1>${escape(input.agentName)} proof verifier</h1>` +
+    `<div class="note">Hosted by ${escape(input.ownerName)}'s agent, built on Open Instinct with Midnight. Read-only: it checks a proof, it never writes.</div>` +
+    (input.error ? `<p class="bad">${escape(input.error)}</p>` : "") +
+    "<form method=\"get\" action=\"/verify\">" +
+    "<label for=\"id\">Attestation id</label>" +
+    `<input id="id" name="id" value="${escape(input.prefill)}" placeholder="64 hexadecimal characters" autocomplete="off" spellcheck="false">` +
+    "<button type=\"submit\">Check this proof</button>" +
+    "</form>" +
+    "<p class=\"note\">A proof reveals only what its prover chose to disclose: whether a memory exists, and at most one category. The memory's text never leaves the agent's host.</p>" +
+    "<footer>docs/MIDNIGHT.md in the repository explains the commitment scheme, the circuit and this verifier.</footer>" +
+    "</main></body></html>"
   );
 }
 

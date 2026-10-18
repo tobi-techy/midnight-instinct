@@ -57,6 +57,15 @@ describe("commitment scheme", () => {
     await client.commit({ text: "same", category: "other", salt: "s" });
     expect(client.status().commitments).toBe(1);
   });
+
+  it("reports the newest attestation so a verifier page can prefill a live example", async () => {
+    const { client } = makeClient();
+    expect(client.status().latestAttestation).toBeUndefined();
+    const committed = await client.commit({ text: "booked the 8am flight", category: "other" });
+    const first = await client.prove({ commitment: committed.commitment });
+    expect(client.latestAttestation()).toBe(first.attestationId);
+    expect(client.status().latestAttestation).toBe(first.attestationId);
+  });
 });
 
 describe("selective disclosure", () => {

@@ -99,9 +99,9 @@ was required for an identity that already exists; that documentation bug is fixe
 
 ## 8. Quality
 
-- **1008 tests pass across 10 packages, 0 failures** (verified 2026-10-18): core
-  233, apps 147, inkbox 149, server 108, cli 84, gateway 67, payments 66, network
-  65, computer 43, midnight 46. Plus the 13 Compact-runtime simulator tests and
+- **1011 tests pass across 10 packages, 0 failures** (verified 2026-10-18): core
+  233, apps 147, inkbox 149, server 110, cli 84, gateway 67, payments 66, network
+  65, computer 43, midnight 47. Plus the 13 Compact-runtime simulator tests and
   an indexer-backed end-to-end check in `deploy/midnight-devnet`.
 - **CI is green on `main`**: `ci`, `secret-scan` and `build-images`. Both
   Dockerfiles were silently broken — they omitted the `packages/midnight`
@@ -226,6 +226,9 @@ itself:
   construction: verifying a proof reveals only what the prover chose to disclose. `/chat`,
   `/status`, `/schedules`, `/midnight/status` and the OAuth callbacks still answer `404` on
   the tunnel listener, which the smoke test asserts.
+- `GET /verify` is the front door: a form prefilled with the newest attestation this agent
+  issued, so a reader always has a proof to check. `GET /verify?id=<64 hex>` hands off to the
+  proof page, which is how a reply, a slide or a bookmark carries a pre-filled link.
 - `MIDNIGHT_VERIFY_URL` (the agent's tunnel host) puts the link in the proof reply next to
   the attestation id, and the Midnight guidance tells the model to hand over both. Without
   it, replies carry the bare id exactly as before.

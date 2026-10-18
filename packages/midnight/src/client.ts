@@ -135,6 +135,8 @@ export interface MidnightStatus {
   commitments: number;
   attestations: number;
   allowances: number;
+  /** The most recent attestation id this agent issued, when there is one. */
+  latestAttestation?: string;
 }
 
 interface PersistedState {
@@ -274,7 +276,17 @@ export class MidnightClient {
       commitments: Object.keys(this.state.commitments).length,
       attestations: Object.keys(this.state.nullifiers).length,
       allowances: Object.keys(this.state.allowances).length,
+      ...(this.latestAttestation() ? { latestAttestation: this.latestAttestation() } : {}),
     };
+  }
+
+  /** The attestation id issued most recently, so a verifier page can prefill a live example. */
+  latestAttestation(): string | undefined {
+    let latest: { id: string; at: string } | undefined;
+    for (const [id, row] of Object.entries(this.state.nullifiers)) {
+      if (!latest || row.at > latest.at) latest = { id, at: row.at };
+    }
+    return latest?.id;
   }
 
   hasCommitment(commitment: string): boolean {

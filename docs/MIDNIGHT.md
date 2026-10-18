@@ -295,6 +295,11 @@ disclosed, that it is single-use, and the mode it ran in); anything else gets JS
 An id that was never anchored answers `valid: false`, and an id that is not 64 hex
 is a `404` before the ledger is even consulted.
 
+`GET /verify` is the front door: one text box, prefilled with the newest attestation
+this agent issued, so a reader always has something real to check. `GET /verify?id=<64 hex>`
+hands off to the proof page, which is how a reply, a slide or a bookmark can carry a
+pre-filled link.
+
 Set `MIDNIGHT_VERIFY_URL` to the agent's public base URL (its tunnel host) and every
 proof reply carries `…/verify/<attestation id>`, so the person on the other end can
 check the proof in a browser without the CLI. With it unset, replies quote the bare

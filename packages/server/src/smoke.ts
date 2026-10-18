@@ -327,6 +327,11 @@ async function main(): Promise<void> {
         const page = await fetch(`${tunnelBase}/verify/${attestationId}`, { headers: { accept: "text/html" } });
         const html = await page.text();
         check(page.status === 200 && html.includes("Proof verified") && html.includes(attestationId), "a browser gets a readable verification page");
+        const index = await fetch(`${tunnelBase}/verify`, { headers: { accept: "text/html" } });
+        const indexHtml = await index.text();
+        check(index.status === 200 && indexHtml.includes(`value="${attestationId}"`), "the verifier's front door prefills the newest proof");
+        const handoff = await fetch(`${tunnelBase}/verify?id=${attestationId}`, { redirect: "manual" });
+        check(handoff.status === 302 && handoff.headers.get("location") === `/verify/${attestationId}`, `a pre-filled link hands off to the proof page (got ${handoff.status})`);
         check((await fetch(`${tunnelBase}/status`)).status === 404, "the tunnel still hides the owner's surface");
         check((await fetch(`${tunnelBase}/verify/${"a".repeat(64)}`)).status === 404, "an unknown id is reported as no proof, not as an error");
       } finally {

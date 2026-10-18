@@ -641,10 +641,10 @@ describe("proof verifier", () => {
     }
   });
 
-  it("does not call the verifier for an id that is not 64 hex, and 404s", async () => {
+  it("does not call the verifier for an id that is not 64 hex, and 404s (the bare /verify is the form)", async () => {
     const { base, close } = await serve(verifyApp());
     try {
-      for (const path of ["/verify/", "/verify/abc", `/verify/${ID}ff`, "/verify/zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz"]) {
+      for (const path of ["/verify/abc", `/verify/${ID}ff`, "/verify/zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz"]) {
         expect((await fetch(`${base}${path}`)).status, path).toBe(404);
       }
       expect(seen).toEqual([]);
@@ -672,6 +672,45 @@ describe("proof verifier", () => {
     }
   });
 
+  it("offers a front door that prefills this agent's newest proof", async () => {
+    const app = verifyApp();
+    app.midnightStatus = () => ({ mode: "mock", commitments: 1, attestations: 1, allowances: 0, latestAttestation: ID });
+    const { base, close } = await serve(app);
+    try {
+      const res = await fetch(`${base}/verify`);
+      expect(res.status).toBe(200);
+      const html = await res.text();
+      expect(html).toContain("<form method=\"get\" action=\"/verify\">");
+      expect(html).toContain(`value="${ID}"`);
+      expect(html).not.toContain("No proof has been issued");
+
+      // Without a proof on record it says so instead of offering an empty box.
+      const bare = await serve(stubApp());
+      try {
+        const page = await (await fetch(`${bare.base}/verify`)).text();
+        expect(page).toContain("No proof has been issued on this agent yet");
+      } finally {
+        await bare.close();
+      }
+    } finally {
+      await close();
+    }
+  });
+
+  it("hands a pre-filled link to the proof page, and rejects an id that is not hex", async () => {
+    const { base, close } = await serve(verifyApp());
+    try {
+      const handoff = await fetch(`${base}/verify?id=${ID}`, { redirect: "manual" });
+      expect(handoff.status).toBe(302);
+      expect(handoff.headers.get("location")).toBe(`/verify/${ID}`);
+      const junk = await fetch(`${base}/verify?id=not-an-id`);
+      expect(junk.status).toBe(400);
+      expect(await junk.text()).toContain("That is not an attestation id");
+    } finally {
+      await close();
+    }
+  });
+
   it("is reachable through the tunnel listener, next to health and the webhook", async () => {
     const app = verifyApp();
     const tunnel = await listenTunnelServer(app, { signingKey: SIGNING_KEY, env: {} });
@@ -681,6 +720,7 @@ describe("proof verifier", () => {
       const res = await fetch(`${base}/verify/${ID}`);
       expect(res.status).toBe(200);
       expect(await res.json()).toMatchObject({ valid: true, attestationId: ID });
+      expect((await fetch(`${base}/verify`)).status).toBe(200);
       expect((await fetch(`${base}/status`)).status).toBe(404);
       expect((await fetch(`${base}/midnight/status`)).status).toBe(404);
     } finally {
