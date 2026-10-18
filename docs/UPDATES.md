@@ -161,6 +161,9 @@ core grew a **public demo mode**, and the demo runs as its own agent:
   demo agent, and the demo agent's prompt still carries no owner contact details.
 - Flags are seed-only, like the other `INSTINCT_*` variables, and a tier written
   into `policy.json` is merged over the guest row instead of replacing it.
+- The guest agent's voice is kept in the repository
+  (`deploy/guest-agent/PERSONA.md`) and seeded with `INSTINCT_PERSONA` on first
+  boot, so the demo persona is reviewable like the rest of the deployment.
 
 The plan is one identity and one VM for the guests, separate from the owner's
 agent, so guests share that agent and its memory and never the owner's. Two
