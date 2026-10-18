@@ -1,8 +1,8 @@
 /**
  * End-to-end smoke test with Pi's faux provider: no network, no API keys.
  * Boots a real agent into a temp data dir, drives it over HTTP and checks the
- * owner flow, the stranger flow, the schedule flow and a stranger's A2A task.
- * Exits non-zero on failure.
+ * owner flow, the stranger flow, the schedule flow, a stranger's A2A task and a
+ * public demo agent's guest flow. Exits non-zero on failure.
  */
 import { mkdtempSync, readFileSync, realpathSync, rmSync, existsSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -10,14 +10,16 @@ import { join } from "node:path";
 import type { AddressInfo } from "node:net";
 import { createModels, fauxAssistantMessage, fauxProvider, fauxToolCall } from "@earendil-works/pi-ai";
 import type { StreamFn } from "@earendil-works/pi-agent-core";
-import { AuditLog, encodeEvent } from "@open-instinct/core";
-import type { OutboundMessage, Outbox, Principal } from "@open-instinct/core";
+import { AuditLog, ContactStore, encodeEvent, resolvePrincipal } from "@open-instinct/core";
+import type { InboundMessage, OutboundMessage, Outbox, Principal } from "@open-instinct/core";
 import { encodeOip } from "@open-instinct/network";
 import { boot } from "./boot.js";
 import { closeInkboxInbox, createHttpServer } from "./http.js";
 
 const OWNER_PHONE = "+15550001111";
 const STRANGER_PHONE = "+15559998888";
+/** A number no contact and no owner row knows: on a demo agent this is a guest. */
+const GUEST_PHONE = "+15559998777";
 const STRANGER_AGENT = "unknown-agent";
 const A2A_TASK = "task_smoke_1";
 const A2A_CONTEXT = "ctx_smoke_1";
@@ -231,6 +233,67 @@ async function main(): Promise<void> {
     check(created !== undefined && created.isError === false && /Wrote .*smoke\.pdf .*1 page/.test(created.result ?? ""), `create_pdf wrote the file and reported one page (got ${JSON.stringify(created?.result)})`);
     check(sent !== undefined && sent.isError === false && (sent.result ?? "").includes(pdfAbsolute), `send_file answered with the file's path (got ${JSON.stringify(sent?.result)})`);
     check(typeof pdfChat.json.response === "string" && (pdfChat.json.response.includes("```maritime-file") || pdfChat.json.response.includes(pdfAbsolute)), "the reply carries the maritime-file block or the path");
+
+    console.log("6. a public demo agent treats an unknown number as a guest");
+    // INSTINCT_AGENT_PUBLIC marks an agent that answers anyone. The same unknown sender
+    // who was turned away in step 2 now gets a conversation: memory opens, the prompt
+    // says "guest", and nothing about the owner is reachable.
+    const guestDir = mkdtempSync(join(tmpdir(), "instinct-smoke-guest-"));
+    const guestEnv: NodeJS.ProcessEnv = { ...env, INSTINCT_DATA_DIR: guestDir, INSTINCT_AGENT_NAME: "Seal Demo", INSTINCT_AGENT_PUBLIC: "1" };
+    const guestOutbox = new RecordingOutbox();
+    const guest = await boot(guestEnv, { model: faux.getModel("faux-1"), streamFn, outbox: guestOutbox, logger: quiet });
+    const guestServer = createHttpServer(guest, { env: guestEnv, logger: quiet });
+    await new Promise<void>((resolve) => guestServer.listen(0, "127.0.0.1", () => resolve()));
+    const guestBase = `http://127.0.0.1:${(guestServer.address() as AddressInfo).port}`;
+    try {
+      check(guest.config.agent.public === true, "the flag reaches config.json");
+      faux.setResponses([
+        fauxAssistantMessage([fauxToolCall("memory_write", { text: "guest likes the demo", durable: true })], { stopReason: "toolUse" }),
+        fauxAssistantMessage("Noted. Tell me something else and I will prove I kept it."),
+      ]);
+      const guestEvent = {
+        ...event,
+        id: "evt_smoke_guest_1",
+        data: {
+          ...event.data,
+          message: { ...event.data.message, id: "msg_smoke_guest_1", conversation_id: "conv_guest", remote_number: GUEST_PHONE, content: "Hi. Can you remember something for me?" },
+        },
+      };
+      const beforeGuest = guestOutbox.sent.length;
+      const guestRes = await fetch(`${guestBase}/chat`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ message: encodeEvent(guestEvent), source: "front_door", conversation_id: "conv_guest" }),
+      });
+      check(guestRes.status === 200, `the guest's envelope is accepted (got ${guestRes.status})`);
+      await settle(() => guestOutbox.sent.length > beforeGuest, 5000);
+      const guestSends = guestOutbox.sent.slice(beforeGuest).filter((s) => s.msg.channel === "imessage" && s.conversationKey === "imessage:conv_guest");
+      check(guestSends.length === 1, `the guest got exactly one iMessage reply (got ${guestSends.length})`);
+      const guestMemoryFile = join(guestDir, "memory", "MEMORY.md");
+      const guestMemory = existsSync(guestMemoryFile) ? readFileSync(guestMemoryFile, "utf8") : "";
+      check(guestMemory.includes("guest likes the demo"), "the guest's memory_write landed: memory is open to a guest");
+      const guestCalls = new AuditLog(guest.state)
+        .read({ kinds: ["tool_call"] })
+        .filter((e) => e.conversationKey === "imessage:conv_guest")
+        .map((e) => e.detail as { tool?: string; isError?: boolean });
+      check(guestCalls.some((c) => c.tool === "memory_write" && c.isError === false), `memory_write executed for the guest (got ${JSON.stringify(guestCalls)})`);
+      const guestPrincipal = resolvePrincipal(
+        { id: "msg_smoke_guest_1", conversationKey: "imessage:conv_guest", text: "hi", from: GUEST_PHONE, channel: "imessage", replyRef: {}, receivedAt: new Date().toISOString() } as InboundMessage,
+        guest.config,
+        new ContactStore(guest.state),
+      );
+      const prompt = guest.runtime.conversation("imessage:conv_guest", guestPrincipal).agent.state.systemPrompt;
+      check(prompt.includes("a public demo agent built on Open Instinct"), "the guest prompt says this is a public demo agent");
+      check(prompt.includes("is trying you out"), "the guest prompt describes the sender as a guest");
+      check(!prompt.includes("Do not run tasks for them"), "the guest prompt does not turn the sender away");
+      check(prompt.includes("Share nothing about Smoke Owner"), "the guest prompt still closes the owner's world");
+      check(!prompt.includes(OWNER_PHONE), "the guest prompt carries no owner contact details");
+    } finally {
+      await new Promise<void>((resolve) => guestServer.close(() => resolve()));
+      await closeInkboxInbox(guest);
+      await guest.close();
+      rmSync(guestDir, { recursive: true, force: true });
+    }
 
     console.log("status");
     const status = await get("/");

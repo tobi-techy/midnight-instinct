@@ -155,6 +155,10 @@ core grew a **public demo mode**, and the demo runs as its own agent:
   agent cannot reach the owner or the host.
 - The prompt follows the policy, so the model is told it is a demo agent talking
   to a guest rather than a stranger to turn away.
+- The end-to-end smoke test (`pnpm smoke`, the real app booted with Pi's faux
+  model) covers the guest path: the same unknown number that is turned away on a
+  private agent gets a conversation, a successful `memory_write` and a reply on a
+  demo agent, and the demo agent's prompt still carries no owner contact details.
 - Flags are seed-only, like the other `INSTINCT_*` variables, and a tier written
   into `policy.json` is merged over the guest row instead of replacing it.
 
