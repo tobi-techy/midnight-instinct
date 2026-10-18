@@ -12,7 +12,7 @@ explicit `disclose()` at a ledger write or circuit return.
 
 | Data | Class | Where it lives | Why | Mechanism |
 |---|---|---|---|---|
-| Memory text | **Private** | Device / `MEMORY.md` | Revealing it defeats the product; it is the thing the owner is protecting | Never leaves the host or the browser; only its digest enters the circuit |
+| Memory text | **Private** | Device / `MEMORY.md`, and one notebook per person under `memory/people/<hash>/` on a public agent | Revealing it defeats the product; it is the thing the owner is protecting | Never leaves the host or the browser; only its digest enters the circuit. A public agent keeps each sender's notebook separate from the owner's and from each other's |
 | Preimage (`sha256(text)`) | **Private** | Circuit input | A memory is often guessable, so a bare hash is brute-forceable | Fed to `persistentCommit(preimage, salt)`, which hides it |
 | Salt | **Private** | Device | Hides the preimage so equal memories don't collide visibly and guesses can't be matched | 32 random bytes; the hiding value in `persistentCommit` |
 | Owner secret | **Private** | Witness (device) | Links a commitment to its owner; leaking it lets others forge ownership proofs | Supplied by a witness; hashed into the owner binding |
@@ -46,12 +46,18 @@ boundary:
 - **Allowance amounts.** As above, public by construction.
 - **Transport metadata.** Whatever the messaging channel (iMessage) and host
   expose is outside this layer.
+- **The host filesystem.** A notebook is plain Markdown on the host. Anyone with
+  shell access to that machine can read every notebook on it. The hash in
+  `memory/people/<hash>/` keeps a directory listing from spelling out who people
+  are; it is not encryption, and it is not meant to be. A public agent should be
+  its own machine and its own identity for exactly this reason.
 
 ## Threat model
 
 | Adversary | Cannot | Because |
 |---|---|---|
 | A verifier | Learn the memory text or any other category | Only the disclosed category and a nullifier are written |
+| Another sender on a public agent | Read the owner's notebook or another sender's | Memory is resolved per principal: a non-owner reaches only `memory/people/<hash of their own address>/`, the owner always resolves to the owner's store, and `owner.profile.preferences` is denied to them |
 | A verifier replaying a proof | Reuse one attestation as two | The attestation id is nullified on first use |
 | A verifier that picks the challenge | Accept a proof made for some other question | The proof is bound to the verifier's 64-hex `attestationId`, and `verify --expect` reports a mismatch rather than passing |
 | Another user of the same contract | Commit or attest against the owner's memories | Owner binding is a commitment to a witness-held secret |

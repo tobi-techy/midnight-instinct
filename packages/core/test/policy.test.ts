@@ -301,17 +301,16 @@ describe("PolicyEngine.canEver and overrides", () => {
   });
 });
 
-describe("public demo agents", () => {
-  it("lets a guest converse, anchor memories in the vault and search, and keeps the notebook and the owner's world closed", () => {
+describe("public agents", () => {
+  it("gives a sender their own notebook and vault, and keeps the owner's world closed", () => {
     const engine = new PolicyEngine(defaultPolicy({ public: true }));
-    const guest = principalOf("stranger");
-    for (const cap of ["converse", "owner.relay", "vault.write", "web.read"] as Capability[]) {
-      expect(engine.evaluate(guest, meta([cap]), {}).outcome, cap).toBe("allow");
+    const person = principalOf("stranger");
+    for (const cap of ["converse", "owner.relay", "vault.write", "memory.write", "web.read"] as Capability[]) {
+      expect(engine.evaluate(person, meta([cap]), {}).outcome, cap).toBe("allow");
     }
+    // memory.write is open, but it gates the caller's own notebook: the runtime and the
+    // memory tools resolve a non-owner to memory/people/<hash>/, never the owner's file.
     for (const cap of [
-      // The notebook stays shut: memory.write also gates memory_read and memory_write,
-      // so a guest can never read or write the owner's MEMORY.md.
-      "memory.write",
       "files.read",
       "files.write",
       "computer.use",
@@ -325,7 +324,7 @@ describe("public demo agents", () => {
       "owner.profile.public",
       "owner.location.approx",
     ] as Capability[]) {
-      expect(engine.evaluate(guest, meta([cap]), {}).outcome, cap).toBe("deny");
+      expect(engine.evaluate(person, meta([cap]), {}).outcome, cap).toBe("deny");
     }
   });
 
@@ -336,12 +335,12 @@ describe("public demo agents", () => {
     expect(engine.evaluate(principalOf("contact"), meta(["converse"]), {}).outcome).toBe("allow");
   });
 
-  it("raises the stranger limits enough for a room of guests", () => {
+  it("raises the stranger limits enough for a room of senders", () => {
     expect(defaultPolicy().strangerLimits).toEqual({ conversationsPerDay: 3, messagesPerConversation: 10 });
     expect(defaultPolicy({ public: true }).strangerLimits).toEqual({ conversationsPerDay: 50, messagesPerConversation: 40 });
   });
 
-  it("keeps the guest row when policy.json carries tier overrides of its own", () => {
+  it("keeps the sender row when policy.json carries tier overrides of its own", () => {
     const state = tempState();
     state.writeJson("policy.json", { version: 1, tiers: { friend: { "calendar.read": "yes" }, stranger: { "web.read": "no" } } });
     const loaded = loadPolicy(state, { public: true });
@@ -350,7 +349,7 @@ describe("public demo agents", () => {
     expect(loaded.tiers.friend?.["calendar.read"]).toBe("yes");
   });
 
-  it("lets a written policy.json decide, and does not add a guest row of its own", () => {
+  it("lets a written policy.json decide, and does not add a sender row of its own", () => {
     const state = tempState();
     expect(loadPolicy(state).tiers).toEqual({});
     savePolicy(state, new PolicyEngine(defaultPolicy({ public: true })).toJSON());

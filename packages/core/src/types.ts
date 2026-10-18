@@ -237,9 +237,9 @@ export interface InstinctConfig {
   version: 1;
   owner: OwnerProfile;
   /**
-   * `public` marks a demo agent that serves anyone who messages it. Unknown senders
-   * become guests: they hold a conversation, may write to memory and may use the web,
-   * and nothing about the owner opens up. Off by default: an unknown sender is a
+   * `public` marks an agent that serves anyone who messages it. Each sender gets a
+   * full conversation, their own notebook and their own vault scope, and may use the
+   * web; nothing about the owner opens up. Off by default: an unknown sender is a
    * stranger who gets one short introduction and a message relay.
    */
   agent: { name: string; handle?: string; persona?: string; public?: boolean };

@@ -48,11 +48,16 @@ const ROWS: Record<Capability, Row> = {
   "computer.use": ["yes", "no", "no", "no", "no", "no"],
   "files.read": ["yes", "no", "no", "no", "no", "no"],
   "files.write": ["yes", "no", "no", "no", "no", "no"],
+  // memory.write: read and write a notebook. Whose notebook depends on the caller:
+  // the owner's MEMORY.md, or — on a public agent — the caller's own file under
+  // memory/people/, resolved per principal by the runtime and the memory tools. It is
+  // "yes" for the owner here and opened for a sender on a public agent by
+  // PUBLIC_GUEST_TIER below; no tier of a private agent ever reaches the owner's.
   "memory.write": ["yes", "no", "no", "no", "no", "no"],
   // vault.write: anchor a shielded memory on Midnight and prove it later without
-  // revealing it. Separate from memory.write so a public demo agent can open the
-  // vault to a guest while the owner's notebook stays closed: a guest's commitment
-  // lives in its own vault scope (see packages/midnight/src/client.ts).
+  // revealing it. Separate from memory.write because the vault is the chain-facing
+  // half of the same idea: a commitment lives in the sender's own vault scope
+  // (see packages/midnight/src/client.ts).
   "vault.write": ["yes", "no", "no", "no", "no", "no"],
   "network.ask": ["yes", "yes", "yes", "yes", "no", "no"],
   "network.invite": ["yes", "no", "no", "no", "no", "no"],
@@ -108,25 +113,27 @@ export function defaultSpendPolicy(): SpendPolicy {
 }
 
 /**
- * The stranger row a public demo agent starts from. A guest is an unknown sender who
- * is here to try the agent out, so `converse` is a full conversation rather than the
- * one-line introduction the default stranger row allows, the vault opens (anchoring
- * and proving commitments inside the guest's own scope) and the public web is open.
- * Everything that touches the owner stays closed, including the notebook itself:
- * `memory.write` stays "no", so `memory_read` and `memory_write` never reach a guest.
- * The file, computer, mail, calendar and spend capabilities are closed too: a demo
- * agent is a public surface, and a prompt injection on it must not reach the owner
- * or the host.
+ * The stranger row a public agent starts from. Anyone who texts a public agent gets an
+ * agent of their own, so `converse` is a full conversation rather than the one-line
+ * introduction the default stranger row allows, the vault opens (anchoring and proving
+ * commitments inside the sender's own scope), the public web is open, and the memory
+ * tools are open too — the runtime and the tools resolve them to the caller's own
+ * notebook under `memory/people/`, never to the owner's `MEMORY.md`.
+ *
+ * The owner's notebook itself stays closed: `owner.profile.preferences` and the file,
+ * computer, mail, calendar and spend capabilities are all closed, so a public agent
+ * never reaches the host, and a prompt injection on it cannot either.
  */
 export const PUBLIC_GUEST_TIER: Partial<Record<Capability, Permission>> = {
   converse: "yes",
   "owner.relay": "yes",
   "vault.write": "yes",
+  "memory.write": "yes",
   "web.read": "yes",
 };
 
 /**
- * Rate limits for a public demo. The stranger defaults (3 conversations a day, 10
+ * Rate limits for a public agent. The stranger defaults (3 conversations a day, 10
  * messages each) are meant for one intruder, not for a room of people taking turns.
  */
 export const PUBLIC_GUEST_LIMITS: Policy["strangerLimits"] = { conversationsPerDay: 50, messagesPerConversation: 40 };
@@ -388,8 +395,8 @@ export class PolicyEngine {
 }
 
 /**
- * policy.json over the defaults. `public` seeds the guest stranger row for a demo
- * agent; a tier written in the file is merged over that row rather than replacing it,
+ * policy.json over the defaults. `public` seeds the sender row for a public agent;
+ * a tier written in the file is merged over that row rather than replacing it,
  * so editing one capability in the file does not silently drop the rest.
  */
 export function loadPolicy(state: StateDir, opts: { public?: boolean } = {}): Policy {

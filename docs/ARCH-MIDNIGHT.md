@@ -58,10 +58,14 @@ flowchart TB
 | CLI | `packages/cli/src/commands/midnight.ts` | `init/list/status/prove/deploy` |
 | Docs | `docs/MIDNIGHT.md`, `docs/ARCH-MIDNIGHT.md` | this set |
 
-Nothing in `packages/core` changed. The Midnight layer reuses the existing
-capability table (`memory.write`, `purchase`), the audit log and the prompt
-pipeline unchanged, which is why the tier matrix and permissions docs stay
-accurate.
+The Midnight layer reuses the existing capability table (`vault.write`,
+`memory.write`, `purchase`), the audit log and the prompt pipeline, so the tier
+matrix and permissions docs stay accurate.
+
+Since this document was written, core grew two things the layer leans on: a public
+agent (a stranger row that opens the vault in the sender's own scope) and one notebook
+per person under `memory/people/`. See [UPDATES.md](UPDATES.md) sections 9-13 and
+[PERMISSIONS.md](PERMISSIONS.md).
 
 ## 3. Data flow: a private memory
 
@@ -75,7 +79,7 @@ sequenceDiagram
   participant C as MidnightClient
   participant L as Ledger
   O->>R: text "remember privately …"
-  R->>T: tool call (policy: memory.write)
+  R->>T: tool call (policy: vault.write)
   T->>S: remember(text, category)
   S->>M: appendDurable(text)
   S->>C: commit({ text, category })

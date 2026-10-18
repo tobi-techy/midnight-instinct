@@ -83,8 +83,8 @@ export class ShieldedMemory {
   async remember(text: string, category?: string, opts: RememberOptions = {}): Promise<AnchoredWrite> {
     const clean = text.trim();
     if (!clean) return { saved: false, error: "nothing to remember" };
-    // A guest's note is not the owner's note: anchor it, keep the plaintext out of
-    // the owner's notebook, and leave it in the conversation that produced it.
+    // Somebody else's note is not the owner's note: anchor it, keep the plaintext out
+    // of the owner's notebook, and leave it in the conversation that produced it.
     const notebook = !opts.scope || opts.scope === OWNER_SCOPE;
     if (notebook) this.inner.appendDurable(clean);
     try {
@@ -93,7 +93,7 @@ export class ShieldedMemory {
         kind: "policy",
         conversationKey: this.conversationKey,
         principal: this.principalId,
-        detail: { tool: "vault_commit", commitment: committed.commitment, txHash: committed.txHash, mode: committed.mode, category: committed.category, ...(notebook ? {} : { scope: "guest" }) },
+        detail: { tool: "vault_commit", commitment: committed.commitment, txHash: committed.txHash, mode: committed.mode, category: committed.category, ...(notebook ? {} : { scope: "person" }) },
       });
       return { saved: true, notebook, commitment: committed.commitment, txHash: committed.txHash, category: committed.category, ...(committed.explorerUrl ? { explorerUrl: committed.explorerUrl } : {}) };
     } catch (err) {

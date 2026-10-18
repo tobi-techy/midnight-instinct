@@ -19,8 +19,8 @@ export interface CommitInput {
   salt?: string;
   /**
    * Whose vault this commitment belongs to. Omitted means the owner's. A public
-   * demo agent passes the sender's principal id, so a guest can anchor and prove
-   * inside a scope of their own and nobody else can prove it.
+   * agent passes the sender's principal id, so a person can anchor and prove inside
+   * a scope of their own and nobody else can prove it.
    */
   scope?: string;
 }
@@ -304,7 +304,7 @@ export class MidnightClient {
     const salt = input.salt ?? randomBytes(32).toString("hex");
     const scope = scopeHash(this.state.vaultKey, input.scope ?? OWNER_SCOPE);
     // Bind the salt to the scope, so two scopes can never share a commitment even for
-    // identical text and an identical caller-supplied salt. One guest cannot recognise
+    // identical text and an identical caller-supplied salt. One person cannot recognise
     // another's commitment by guessing the words, and the circuit only ever sees a
     // 32-byte salt, which is all it wants.
     const boundSalt = createHash("sha256").update(`${scope}\n${salt}`).digest("hex");

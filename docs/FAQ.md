@@ -174,7 +174,8 @@ web requests the agent makes on purpose.
 ### 18. Where is my data and can I read it?
 
 All state is plain files under the data directory (`./.instinct` locally, `/data` on
-Maritime). `memory/MEMORY.md` is the agent's notebook. `memory/journal/` has one file per
+Maritime). `memory/MEMORY.md` is the owner's notebook; on a public agent each sender also
+gets their own under `memory/people/<hash>/`, and `memory/journal/` has one file per
 day. `contacts.json` is the people and their tiers. `audit.jsonl` is every action.
 `sessions/` holds the transcripts. You can open, edit or delete any of them. Layout:
 [ARCHITECTURE.md](ARCHITECTURE.md#state-on-disk).

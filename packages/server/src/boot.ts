@@ -27,7 +27,7 @@ import {
   resolveDataDir,
   resolveModel,
 } from "@open-instinct/core";
-import type { InboundMessage, InstinctConfig, Outbox, RegisteredTool, SpendGate } from "@open-instinct/core";
+import type { InboundMessage, InstinctConfig, Outbox, Principal, RegisteredTool, SpendGate } from "@open-instinct/core";
 import { InkboxA2A, InkboxChannel, InkboxInboundHydrator, InkboxProvisioner, messagingTools, sendFileTool } from "@open-instinct/inkbox";
 import { computerGuidance, detectComputer } from "@open-instinct/computer";
 import type { ComputerBackend } from "@open-instinct/computer";
@@ -109,7 +109,8 @@ export async function boot(env: NodeJS.ProcessEnv, opts: BootOptions = {}): Prom
   if (ensurePersona(state, env.INSTINCT_PERSONA)) log(`wrote ${state.path("PERSONA.md")}${env.INSTINCT_PERSONA?.trim() ? " from INSTINCT_PERSONA" : " (default persona)"}`);
 
   const audit = new AuditLog(state);
-  // A public demo agent seeds the guest stranger row (see PUBLIC_GUEST_TIER in policy.ts).
+  // A public agent seeds the stranger row that opens the vault and the caller's own
+  // notebook (see PUBLIC_GUEST_TIER in policy.ts).
   const policy = new PolicyEngine(loadPolicy(state, { public: config.agent.public === true }), {
     spentTodayUsd: () => audit.spentTodayUsd(config.owner.timezone),
   });
@@ -163,9 +164,20 @@ export async function boot(env: NodeJS.ProcessEnv, opts: BootOptions = {}): Prom
   const registry = new ToolRegistry();
   const promptSections: string[] = [];
 
+  // Notebooks. On a public agent every sender gets an agent of their own, so a
+  // non-owner resolves to their own file under memory/people/ and never to the owner's
+  // MEMORY.md: core's tools and prompt resolve the owner first, so this resolver only
+  // ever needs the caller's own key. The key is the person's address when there is one,
+  // so the same phone keeps one notebook whether they are a stranger or a saved contact,
+  // and it is hashed on the way to disk, so the folder name does not spell out who they are.
+  // On a private agent this is absent and every caller resolves to the owner's store.
+  const notebookKey = (principal: Principal): string => principal.email ?? principal.phone ?? principal.id;
+  const notebookFor = (principal: Principal): MemoryStore => MemoryStore.forPerson(state, notebookKey(principal));
+
   registry.registerMany(
     coreTools({
       memory,
+      ...(config.agent.public === true ? { memoryFor: notebookFor } : {}),
       scheduler,
       approvals,
       audit,
@@ -215,7 +227,7 @@ export async function boot(env: NodeJS.ProcessEnv, opts: BootOptions = {}): Prom
       midnightTools({
         client: midnightClient,
         shielded,
-        // A public demo agent opens the vault to a guest, in the guest's own scope.
+        // A public agent opens the vault to whoever texts it, in their own scope.
         publicMode: config.agent.public === true,
         ...(midnightCfg.verifyBaseUrl ? { verifyUrl: midnightCfg.verifyBaseUrl } : {}),
         auditAppend: (entry) => audit.append(entry),
@@ -364,6 +376,7 @@ export async function boot(env: NodeJS.ProcessEnv, opts: BootOptions = {}): Prom
     scheduler,
     contacts,
     memory,
+    ...(config.agent.public === true ? { memoryFor: notebookFor } : {}),
     registry,
     model,
     outbox,
@@ -402,7 +415,7 @@ export async function boot(env: NodeJS.ProcessEnv, opts: BootOptions = {}): Prom
     sync.start();
   }
 
-  log(`agent "${config.agent.name}" ready: model ${modelSpec}, ${registry.all().length} tools, data ${state.root}${config.agent.public ? " (public demo agent: unknown senders are guests)" : ""}`);
+  log(`agent "${config.agent.name}" ready: model ${modelSpec}, ${registry.all().length} tools, data ${state.root}${config.agent.public ? " (public agent: every sender gets their own notebook and vault scope)" : ""}`);
 
   return {
     runtime,

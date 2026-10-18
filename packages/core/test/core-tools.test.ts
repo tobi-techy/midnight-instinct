@@ -23,7 +23,7 @@ const stubLookup = async (host: string): Promise<string[]> => {
   return ["93.184.216.34"];
 };
 
-function setup(opts: { fetchImpl?: typeof fetch; searchApiKey?: string; lookup?: (host: string) => Promise<string[]> } = {}) {
+function setup(opts: { fetchImpl?: typeof fetch; searchApiKey?: string; lookup?: (host: string) => Promise<string[]>; memoryFor?: CoreToolDeps["memoryFor"] } = {}) {
   const state = tempState();
   const sent: Array<{ msg: OutboundMessage; principal: Principal }> = [];
   const outbox: Outbox = { send: async (msg, ctx) => void sent.push({ msg, principal: ctx.principal }) };
@@ -91,6 +91,24 @@ describe("memory tools", () => {
     expect(journal).toContain("Booked a table");
     expect(journal).toContain("Sam asked about dinner");
     expect(journal).not.toContain("window seats");
+  });
+
+  it("resolves the tools to the caller's own notebook when memoryFor is set", async () => {
+    const person = principalOf("stranger");
+    // The owner is resolved to the owner's own store by the tools themselves, whatever
+    // this resolver would say, so a blanket resolver is safe here.
+    const { run, text, deps, state } = setup({ memoryFor: (p) => MemoryStore.forPerson(state, p.id) });
+    await run("memory_write", { text: "The person keeps bees.", durable: true }, person);
+    await run("memory_write", { text: "Maria likes window seats.", durable: true });
+
+    const personStore = MemoryStore.forPerson(state, person.id);
+    expect(personStore.readDurable()).toContain("bees");
+    expect(personStore.readDurable()).not.toContain("window seats");
+    expect(deps.memory.readDurable()).toContain("window seats");
+    expect(deps.memory.readDurable()).not.toContain("bees");
+    // That person reads their own notes back, never the owner's file.
+    expect(text(await run("memory_read", {}, person))).toContain("bees");
+    expect(text(await run("memory_read", {}, person))).not.toContain("window seats");
   });
 });
 

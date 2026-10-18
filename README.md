@@ -36,7 +36,7 @@ The whole design is a split between what the world can read and what stays on yo
 
 | Public (Midnight, Preprod) | Private (your host) |
 |---|---|
-| 32-byte commitments to each memory | the memory text itself, in `MEMORY.md` |
+| 32-byte commitments to each memory | the memory text itself, in `MEMORY.md` for the owner and `memory/people/<hash>/MEMORY.md` for anyone else the agent talks to |
 | category attestations, one code per proof | the plain category code, until the owner attests it |
 | single-use nullifiers | the owner secret and salts |
 | allowance limits, spends and revocations | which purchase a spend was for |
@@ -60,7 +60,8 @@ The agent is deployed from this repository: it runs on a VM with no laptop
 attached, reachable over iMessage and email. Text `connect @sealai` to
 **+16504849720**, or email `sealai@inkboxmail.com`, then:
 
-1. Ask it to remember something.
+1. Tell it your name and ask it to remember something. Each person who texts it gets a
+   notebook of their own on the host.
 2. Ask it to prove a fact about that memory. The text stays on the host; the reply
    carries an attestation id and a link.
 3. Open that link (`https://sealai.inkboxwire.com/verify/<attestationId>`), or paste
@@ -237,7 +238,7 @@ For many people, run the [gateway](packages/gateway/README.md): a signup page th
 ## Repository
 
 ```
-packages/core       Pi agent loop, policy engine, memory, scheduler, approvals, audit
+packages/core       Pi agent loop, policy engine, per-person notebooks, scheduler, approvals, audit
 packages/inkbox     iMessage, SMS, email, webhooks, agent-to-agent transport
 packages/computer   the desktop (Maritime desktopd in the VM, or hosted Computers MCP)
 packages/apps       Composio Tool Router
@@ -258,7 +259,7 @@ docs/               architecture, permissions, protocol, keys, deploy, research
 
 ## Status
 
-The base is version 0.1: nine packages, an end-to-end smoke test and a cold-start test from a fresh clone. This fork adds the Midnight layer and stands at **1011 tests across 10 packages**, plus 13 Compact-runtime simulator tests. Both contracts are live on Preprod. Live iMessage and Maritime deployment were exercised against real identities during development; treat them as beta.
+The base is version 0.1: nine packages, an end-to-end smoke test and a cold-start test from a fresh clone. This fork adds the Midnight layer and stands at **1014 tests across 10 packages**, plus 13 Compact-runtime simulator tests. Both contracts are live on Preprod. Live iMessage and Maritime deployment were exercised against real identities during development; treat them as beta.
 
 Merit Systems publishes an unrelated project called [OpenInstinct](https://github.com/Merit-Systems/OpenInstinct). This project is not affiliated with it or with Instinct.
 

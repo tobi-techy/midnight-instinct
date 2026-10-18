@@ -1,17 +1,24 @@
 /**
- * Memory is two markdown files the owner can read and edit by hand:
- * memory/MEMORY.md for durable facts and memory/journal/YYYY-MM-DD.md for what
- * happened each day. The prompt builder injects `digest()`; Pi compaction keeps
- * the conversation itself small.
+ * Memory is markdown the owner can read and edit by hand: memory/MEMORY.md for durable
+ * facts and memory/journal/YYYY-MM-DD.md for what happened each day. The prompt builder
+ * injects `digest()`; Pi compaction keeps the conversation itself small.
+ *
+ * A public agent keeps a notebook per person as well, in
+ * memory/people/<hash>/MEMORY.md, so anyone who messages it gets an agent that knows
+ * them without ever sharing the owner's notebook or another person's.
  */
+import { createHash } from "node:crypto";
 import type { StateDir } from "./state.js";
-
-const DURABLE = "memory/MEMORY.md";
-const JOURNAL_DIR = "memory/journal";
 
 const DURABLE_TEMPLATE = `# Memory
 
 Durable facts about the owner, their people and their preferences. Short lines. One fact per line.
+`;
+
+/** The header a person's own notebook starts with, so a reader knows whose it is. */
+const PERSON_TEMPLATE = `# Memory
+
+What this person told me and what matters to them. Short lines. One fact per line.
 `;
 
 /** Local calendar date, YYYY-MM-DD. The agent's VM runs in the owner's chosen TZ or UTC. */
@@ -40,28 +47,50 @@ function tail(text: string, max: number): string {
 
 export class MemoryStore {
   private readonly state: StateDir;
+  /** "" for the owner's notebook; "people/<hash>" for one person's. */
+  private readonly root: string;
 
-  constructor(state: StateDir) {
+  constructor(state: StateDir, root = "") {
     this.state = state;
+    this.root = root.replace(/^\/+|\/+$/g, "");
+  }
+
+  /**
+   * The notebook of one person, keyed by a hash of their address or principal id: the file
+   * does not name the number that wrote it, two people never share a file, and neither of
+   * them can reach the owner's MEMORY.md. The same idea as a vault scope.
+   */
+  static forPerson(state: StateDir, personKey: string): MemoryStore {
+    const hash = createHash("sha256").update(personKey.trim()).digest("hex").slice(0, 32);
+    return new MemoryStore(state, `people/${hash}`);
+  }
+
+  /** Where this store writes, relative to the data dir. Used by docs, tests and the smoke run. */
+  durablePath(): string {
+    return this.root ? `memory/${this.root}/MEMORY.md` : "memory/MEMORY.md";
+  }
+
+  private journalDir(): string {
+    return this.root ? `memory/${this.root}/journal` : "memory/journal";
   }
 
   readDurable(): string {
-    return this.state.readText(DURABLE, "");
+    return this.state.readText(this.durablePath(), "");
   }
 
   appendDurable(text: string): void {
     const current = this.readDurable();
-    const base = current || DURABLE_TEMPLATE;
+    const base = current || (this.root ? PERSON_TEMPLATE : DURABLE_TEMPLATE);
     const sep = base.endsWith("\n") ? "" : "\n";
-    this.state.writeText(DURABLE, `${base}${sep}${text.trim()}\n`);
+    this.state.writeText(this.durablePath(), `${base}${sep}${text.trim()}\n`);
   }
 
   replaceDurable(text: string): void {
-    this.state.writeText(DURABLE, text.endsWith("\n") ? text : text + "\n");
+    this.state.writeText(this.durablePath(), text.endsWith("\n") ? text : text + "\n");
   }
 
   journalPath(date: Date = new Date()): string {
-    return `${JOURNAL_DIR}/${journalDate(date)}.md`;
+    return `${this.journalDir()}/${journalDate(date)}.md`;
   }
 
   readJournal(date: Date = new Date()): string {

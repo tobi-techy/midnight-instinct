@@ -3,9 +3,9 @@
  * allowance tool. Capabilities reuse the existing policy table (vault.write,
  * memory.write, purchase) so the tier matrix in core/policy.ts keeps working:
  * by default only the owner commits or proves anything, and `vault_status` and
- * the allowance stay owner-only. On a public demo agent (config.agent.public) a
- * guest may commit and prove too, inside a vault scope of their own, so one
- * guest can never prove or read another's commitment.
+ * the allowance stay owner-only. On a public agent (config.agent.public) whoever
+ * is talking may commit and prove too, inside a vault scope of their own, so one
+ * person can never prove or read another person's commitment.
  */
 import { Type } from "typebox";
 import { defineTool, textResult, type Principal, type RegisteredTool, type ToolContext, type ToolResultLike } from "@open-instinct/core";
@@ -16,7 +16,7 @@ import type { ShieldedMemory } from "./memory.js";
 export interface MidnightToolDeps {
   client: MidnightClient;
   shielded: ShieldedMemory;
-  /** True on a public demo agent: unknown senders may use the vault in their own scope. */
+  /** True on a public agent: anyone who texts may use the vault in their own scope. */
   publicMode?: boolean;
   /**
    * Public base URL the agent is reachable at (its Inkbox tunnel host). When set, a proof
@@ -37,8 +37,9 @@ function isOwner(p: Principal): boolean {
 
 /**
  * The vault scope this caller commits and proves in. The owner is always the owner
- * scope. A guest gets the scope of their own principal id, which the client hashes
- * before it reaches the state file. Anyone else has no scope and no vault access.
+ * scope. Anyone else on a public agent gets the scope of their own principal id,
+ * which the client hashes before it reaches the state file. Off a public agent,
+ * nobody else has a scope and nobody else has vault access.
  */
 function vaultScopeOf(p: Principal, publicMode: boolean): string | undefined {
   if (isOwner(p)) return OWNER_SCOPE;
@@ -62,7 +63,7 @@ export function midnightTools(deps: MidnightToolDeps): RegisteredTool[] {
     name: "vault_commit",
     label: "Anchor memory on Midnight",
     description:
-      "Save a durable memory AND anchor its shielded commitment on Midnight. The text stays on this host; the chain only gets an opaque hash plus a tx hash. Returns the commitment and tx hash to quote back. Owner only, except on a public demo agent where a guest may anchor inside their own scope.",
+      "Save a durable memory AND anchor its shielded commitment on Midnight. The text stays on this host; the chain only gets an opaque hash plus a tx hash. Returns the commitment and tx hash to quote back. Owner only, except on a public agent, where the person talking anchors inside their own scope.",
     parameters: Type.Object({
       text: Type.String({ description: "The memory to save, one or two sentences" }),
       category: Type.Optional(Type.String({ description: "health, finance, contact, preference or other (default other)" })),
@@ -86,7 +87,7 @@ export function midnightTools(deps: MidnightToolDeps): RegisteredTool[] {
     name: "vault_prove_reveal",
     label: "Prove a memory without revealing it",
     description:
-      "Generate a Midnight selective-disclosure proof for an anchored memory. The verifier learns only the disclosed category (or bare existence), never the text. Give the commitment from vault_commit or vault_status. Owner only, except on a public demo agent where a guest may prove a commitment anchored in their own scope.",
+      "Generate a Midnight selective-disclosure proof for an anchored memory. The verifier learns only the disclosed category (or bare existence), never the text. Give the commitment from vault_commit or vault_status. Owner only, except on a public agent, where the person talking can prove a commitment anchored in their own scope.",
     parameters: Type.Object({
       commitment: Type.String({ description: "64 hex chars from vault_commit" }),
       disclose: Type.Optional(Type.String({ description: "Category to disclose (health, finance, contact, preference, other) or 'existence' for proof-of-existence only (default)" })),

@@ -53,6 +53,8 @@ interface HarnessOptions {
   extraTools?: RegisteredTool[];
   /** Also register the real core tools (ask_owner, notify_owner, memory, ...). */
   withCoreTools?: boolean;
+  /** Resolve a non-owner to their own notebook, as a public agent's boot does. */
+  peopleNotebooks?: boolean;
   typing?: Outbox["typing"];
   deps?: Partial<RuntimeDeps>;
 }
@@ -144,7 +146,8 @@ function harness(opts: HarnessOptions = {}): Harness {
     },
     ...(opts.typing ? { typing: opts.typing } : {}),
   };
-  if (opts.withCoreTools) registry.registerMany(coreTools({ memory, scheduler, approvals, audit, config, outbox }));
+  const memoryFor = opts.peopleNotebooks ? (p: Principal): MemoryStore => MemoryStore.forPerson(state, p.id) : undefined;
+  if (opts.withCoreTools) registry.registerMany(coreTools({ memory, scheduler, approvals, audit, config, outbox, ...(memoryFor ? { memoryFor } : {}) }));
   const deps: RuntimeDeps = {
     state,
     config,
@@ -154,6 +157,7 @@ function harness(opts: HarnessOptions = {}): Harness {
     scheduler,
     contacts,
     memory,
+    ...(memoryFor ? { memoryFor } : {}),
     registry,
     model: faux.getModel(),
     outbox,
@@ -1061,6 +1065,46 @@ describe("memory for non-owners", () => {
     expect(contact).not.toContain("# Memory");
     const owner = await promptFor(OWNER_PHONE, "imessage:me");
     expect(owner).toContain("Mercury");
+  });
+});
+
+describe("personal notebooks on a public agent", () => {
+  it("files what each sender says under their own hash, and never in the owner's memory", async () => {
+    const h = harness({ withCoreTools: true, peopleNotebooks: true, policy: defaultPolicy({ public: true }) });
+    h.deps.config.agent = { ...h.deps.config.agent, public: true };
+    h.deps.memory.appendDurable("Owner: bank Mercury 4421.");
+    const alex = "+12125550001";
+    const pat = "+12125550002";
+
+    h.faux.setResponses([toolTurn("memory_write", { text: "Alex sails on weekends.", durable: true }), textTurn("Noted.")]);
+    const aRes = await h.runtime.handleInbound(inbound({ channel: "imessage", from: alex, conversationKey: "imessage:alex", text: "remember I sail on weekends" }));
+    h.faux.setResponses([toolTurn("memory_write", { text: "Pat keeps bees.", durable: true }), textTurn("Noted.")]);
+    const pRes = await h.runtime.handleInbound(inbound({ channel: "imessage", from: pat, conversationKey: "imessage:pat", text: "remember I keep bees" }));
+
+    const alexStore = MemoryStore.forPerson(h.deps.state, aRes.principal.id);
+    const patStore = MemoryStore.forPerson(h.deps.state, pRes.principal.id);
+    expect(alexStore.durablePath()).toMatch(/^memory\/people\/[0-9a-f]{32}\/MEMORY\.md$/);
+    expect(alexStore.durablePath()).not.toBe(patStore.durablePath());
+    expect(h.deps.state.exists(alexStore.durablePath())).toBe(true);
+    expect(alexStore.readDurable()).toContain("Alex sails on weekends.");
+    expect(alexStore.readDurable()).not.toContain("bees");
+    expect(patStore.readDurable()).toContain("Pat keeps bees.");
+    expect(patStore.readDurable()).not.toContain("sails");
+
+    // The owner's own notebook is untouched by either of them.
+    expect(h.deps.memory.readDurable()).toContain("Mercury");
+    expect(h.deps.memory.readDurable()).not.toContain("sails");
+    expect(h.deps.memory.readDurable()).not.toContain("bees");
+
+    // And each turn's prompt carries that person's notebook only: no other person's note,
+    // and nothing out of the owner's file.
+    h.faux.setResponses([textTurn("You sail on weekends.")]);
+    await h.runtime.handleInbound(inbound({ channel: "imessage", from: alex, conversationKey: "imessage:alex", text: "what do you know about me?" }));
+    const prompt = h.runtime.conversation("imessage:alex", aRes.principal).agent.state.systemPrompt;
+    expect(prompt).toContain("Alex sails on weekends.");
+    expect(prompt).toContain("notebook (kept for them on this host)");
+    expect(prompt).not.toContain("bees");
+    expect(prompt).not.toContain("Mercury");
   });
 });
 

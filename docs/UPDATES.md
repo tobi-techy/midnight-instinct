@@ -99,8 +99,8 @@ was required for an identity that already exists; that documentation bug is fixe
 
 ## 8. Quality
 
-- **1011 tests pass across 10 packages, 0 failures** (verified 2026-10-18): core
-  233, apps 147, inkbox 149, server 110, cli 84, gateway 67, payments 66, network
+- **1014 tests pass across 10 packages, 0 failures** (verified 2026-10-18): core
+  236, apps 147, inkbox 149, server 110, cli 84, gateway 67, payments 66, network
   65, computer 43, midnight 47. Plus the 13 Compact-runtime simulator tests and
   an indexer-backed end-to-end check in `deploy/midnight-devnet`.
 - **CI is green on `main`**: `ci`, `secret-scan` and `build-images`. Both
@@ -135,80 +135,83 @@ was required for an identity that already exists; that documentation bug is fixe
   sides. Four tests, including the regression case with an inbound
   `content-length`.
 
-## 9. A guest agent, so anyone who texts gets an answer
+## 9. A public agent, so anyone who texts gets their own agent
 
-The deployed agent is one person's agent, and it behaves like one. An unknown
-number is a `stranger`: the prompt tells it to introduce itself once, offer to
-pass a message to the owner and run no tasks. That is the correct behaviour for a
-private agent, and it is why a judge texting @sealai got a polite brush-off.
+The agent is one person's agent, and it behaved like one. An unknown number is a
+`stranger`: the prompt tells it to introduce itself once, offer to pass a message to
+the owner and run no tasks. That is the correct behaviour for a private agent, and it
+is why a judge texting @sealai got a polite brush-off.
 
-For a judged demo we want the opposite, without opening the owner's agent. So the
-core grew a **public demo mode**, and the demo runs as its own agent:
+For a judged demo we want the opposite, without opening the owner's data. So the core
+grew a **public mode**, and the deployed agent now runs it:
 
-- `INSTINCT_AGENT_PUBLIC=1` (seeded into `config.agent.public`) marks an agent as
-  a public surface. Unknown senders become **guests**: `converse` opens from
-  `intro` to a full conversation, `memory.write` and `web.read` open, and the
-  stranger rate limits rise from 3 conversations a day to 50. Everything about
-  the owner stays closed: their profile, location, calendar, mail, contacts,
-  plans, spend, files, computer and `network.*` capabilities are denied to a
-  guest exactly as they are to a stranger, so a prompt injection into a public
+- `INSTINCT_AGENT_PUBLIC=1` (seeded into `config.agent.public`) marks an agent that
+  answers anyone who messages it. An unknown sender gets a personal agent here:
+  `converse` opens from `intro` to a full conversation, `web.read` opens, `memory.write`
+  opens into a notebook of their own (section 13), the vault opens in their own scope
+  (section 10), and the stranger rate limits rise from 3 conversations a day to 50.
+  Everything about the owner stays closed: their notebook, profile, location, calendar,
+  mail, contacts, plans, spend, files, computer and `network.*` capabilities are denied
+  to a sender exactly as they are to a stranger, so a prompt injection into a public
   agent cannot reach the owner or the host.
-- The prompt follows the policy, so the model is told it is a demo agent talking
-  to a guest rather than a stranger to turn away.
-- The end-to-end smoke test (`pnpm smoke`, the real app booted with Pi's faux
-  model) covers the guest path: the same unknown number that is turned away on a
-  private agent gets a conversation, a successful `memory_write` and a reply on a
-  demo agent, and the demo agent's prompt still carries no owner contact details.
-- Flags are seed-only, like the other `INSTINCT_*` variables, and a tier written
-  into `policy.json` is merged over the guest row instead of replacing it.
-- The guest agent's voice is kept in the repository
-  (`deploy/guest-agent/PERSONA.md`) and seeded with `INSTINCT_PERSONA` on first
-  boot, so the demo persona is reviewable like the rest of the deployment.
+- The prompt follows the policy, so the model is told it is a personal agent that
+  belongs to whoever is talking, with that person's own notebook, rather than a demo
+  the person is only trying out.
+- The end-to-end smoke test (`pnpm smoke`, the real app booted with Pi's faux model)
+  covers the sender path: the same unknown number that is turned away on a private agent
+  gets a conversation, a note filed in their own notebook, a scoped vault commit, a
+  proof, and a verifier page that answers over the tunnel listener, while the prompt
+  still carries no owner contact details. A second unknown number gets a second
+  notebook, and neither can see the other's.
+- `INSTINCT_AGENT_NAME` and `INSTINCT_AGENT_PUBLIC` now override an existing
+  `config.json`, the way `INSTINCT_MODEL` already did. Without that, a hosted agent
+  could not be renamed or opened by the platform running it: the flags were silently
+  ignored because the file wins on every later boot.
+- The voice is kept in the repository (`deploy/demo-agent/PERSONA.md`) and installed as
+  the deployed agent's `PERSONA.md`, because `INSTINCT_PERSONA` only seeds a first boot
+  and this agent already had one.
 
-The plan is one identity and one VM for the guests, separate from the owner's
-agent, so guests share that agent and its memory and never the owner's. Two
-platform limits shape it, both verified on the account:
+**One agent, a notebook per person; no second identity.** The first plan was a second
+identity and a second VM for the public side, and it is dropped. It needed an Inkbox org
+admin key, and the free plan allows **3 agents and 1 awake machine**: waking the second
+agent returned `200` and put the primary to sleep, while starting the primary while the
+second was awake returned `429`. One agent is awake at a time, so a separate demo agent
+would have meant waking it before every judged window and leaving the owner's agent
+asleep anyway. The deployed agent is the public one instead: it has no owner memory and
+no owner phone configured, so the sender path is the only path anyone reaches, and there
+is nothing private behind it. What separates people is not a second process but the
+notebook each of them gets (section 13).
 
-- the free plan allows **3 agents and 1 awake machine**. Waking the second agent
-  returned `200` and put the primary to sleep, and starting the primary while the
-  second was awake returned `429`. One agent is awake at a time, so the demo agent
-  is woken before a judged window and the owner's agent sleeps meanwhile:
+That leaves the sleep caveat, which is real and documented for judges: a message that
+arrives while the agent is asleep does not reach it, the delivery records `502`, and
+replaying it after a wake (`inkbox webhook delivery list`, then
+`inkbox webhook delivery replay <delivery-id>`) produces the reply. Turning sleep off is
+a paid add-on, so we wake the agent before a judged window instead.
 
-  ```
-  curl -s -X POST -H "Authorization: Bearer $MARITIME_API_KEY" \
-    https://api.maritime.sh/api/agents/<guest agent id>/start
-  ```
-
-  A message that arrives while an agent is asleep does not reach it: the delivery
-  records `502`. Replay it after the wake with `inkbox webhook delivery list`
-  then `inkbox webhook delivery replay <delivery-id>`.
-- creating an identity needs either an Inkbox **org admin key** (the Inkbox
-  Console can mint one) or the **agent self-signup** flow, which needs no key and
-  only a human confirming a code by email. An identity-scoped key gets `403` on
-  identity creation: it manages its own identity and nothing else.
-
-## 10. The vault, for guests
+## 10. The vault, for whoever is talking
 
 The submission tells judges to "ask it to prove a fact about that memory", and on a
 private agent only the owner can: `vault_commit` and `vault_prove_reveal` refused
-anyone else, so that step failed on a demo agent. Three changes fixed it.
+anyone else, so that step failed on a public agent. Three changes fixed it.
 
-- A new `vault.write` capability carries the two vault tools. `memory.write` stays the
-  owner's notebook, which matters because it also gates `memory_read`: opening memory to
-  a guest would have handed them the owner's `MEMORY.md`.
-- In public mode an unknown sender may commit and prove inside a vault scope of their own.
-  `MidnightClient` records the scope on the commitment and binds the salt to it, so two
-  guests anchoring the same words with the same salt still get different commitments. A
-  guest cannot prove another scope's commitment, the state file stores a hash of the
-  sender rather than the sender, and a guest's plaintext never enters the owner's
-  notebook: it stays in the conversation. `vault_status` and `allowance_check` stay
-  owner-only.
+- A new `vault.write` capability carries the two vault tools. `memory.write` is the
+  notebook, and opening it is a separate decision with a separate answer (section 13):
+  it also gates `memory_read`, so opening it carelessly is how a sender would reach the
+  owner's `MEMORY.md`.
+- On a public agent, anyone who texts may commit and prove inside a vault scope of their
+  own. `MidnightClient` records the scope on the commitment and binds the salt to it, so
+  two people anchoring the same words with the same salt still get different
+  commitments. Nobody can prove another scope's commitment, the state file stores a hash
+  of the sender rather than the sender, and a committed plaintext never enters the
+  owner's notebook: it stays in the conversation. `vault_status` and `allowance_check`
+  stay owner-only.
 - The proof reply hands over the whole attestation id instead of a truncated one, and the
-  Midnight guidance and the guest persona say to quote it so the other side can verify.
+  Midnight guidance and the persona say to quote it so the other side can verify.
 
-The end-to-end smoke test covers the guest path with the vault wired in mock mode: the
-guest's note is anchored, `midnight.json` holds one scoped commitment, `MEMORY.md` stays
-clean, and the guest's prompt lists `vault.write` but not `memory.write`.
+The end-to-end smoke test covers the sender path with the vault wired in mock mode: the
+sender's note is anchored, `midnight.json` holds one scoped commitment, the owner's
+`MEMORY.md` stays clean, and the prompt lists both `vault.write` and `memory.write` —
+the latter pointing at that person's own notebook.
 
 ## 11. A verifier link a judge can click
 
@@ -239,7 +242,7 @@ nullifier is real, but no transaction was submitted, so the page says so in as m
 On `local`/`testnet` the page is a read through the adapter to the ledger. Either way the
 plaintext never leaves the host.
 
-The smoke test now runs the whole loop: an unknown number commits a memory as a guest, asks
+The smoke test now runs the whole loop: an unknown number commits a memory as themselves, asks
 for a proof, and the proof is then checked through the tunnel listener — JSON and page — with
 the owner's surface still hidden.
 
@@ -253,12 +256,13 @@ Worth stating without decoration, because a judge will ask:
   as many words on every check, so nothing overstates what a link proves. Live example from
   the deployed agent: `https://sealai.inkboxwire.com/verify/6910e607567598e110eb582693b7e757e856375db84bd3479bcc7b4fd643ac3c`
   reports `valid: true`, `disclosed: health`, `singleUse: true`, `mode: mock`.
-- **The deployed agent is a public demo agent.** It is named Seal, runs
-  `INSTINCT_AGENT_PUBLIC=1`, and its `PERSONA.md` is the demo voice in
-  `deploy/guest-agent/PERSONA.md`, so an unknown number is a guest with the vault rather
-  than a stranger with a brush-off. Both `INSTINCT_AGENT_NAME` and `INSTINCT_AGENT_PUBLIC`
-  now override an existing `config.json` the way `INSTINCT_MODEL` already did — without
-  that, a hosted agent could not be renamed or opened by the platform running it.
+- **The deployed agent is a public agent.** It is named Seal, runs
+  `INSTINCT_AGENT_PUBLIC=1`, and its `PERSONA.md` is the voice in
+  `deploy/demo-agent/PERSONA.md`, so an unknown number gets a personal agent with their
+  own notebook and the vault rather than a stranger with a brush-off. Both
+  `INSTINCT_AGENT_NAME` and `INSTINCT_AGENT_PUBLIC` now override an existing
+  `config.json` the way `INSTINCT_MODEL` already did — without that, a hosted agent could
+  not be renamed or opened by the platform running it.
 - **The chain evidence is the Preprod deployment of 2026-10-16.** Both contracts are live
   (`memory-vault` `6e9d608a…`, `allowance-registry` `fd4bfac0…`), Preprod holds the
   commitment `1443be15…` to `"I take medication X daily"`, one health attestation
@@ -277,13 +281,56 @@ Worth stating without decoration, because a judge will ask:
 So the demo runs end to end on the live agent (commit, prove, public verify) and the chain
 half of the story is the recorded Preprod run, reproducible from `deploy/midnight-devnet/`.
 
+## 13. A notebook per person, so "personal" is literal
+
+The last thing that did not fit the pitch: the agent answered everyone, but it kept one
+memory. Two people texting it shared a notebook, and a sender's notes had nowhere to go at
+all, because `memory.write` was the owner's file. "A personal agent" should mean what it
+says, so memory is now one notebook per person.
+
+- `MemoryStore.forPerson(state, key)` puts a person's notebook at
+  `memory/people/<sha256(key)[0:32]>/MEMORY.md`, with their journal beside it under
+  `journal/`. The folder name is a hash, so a directory listing does not spell out who
+  they are. `key` is the person's address when they have one (their phone or email) and
+  their principal id otherwise, so the same phone keeps one notebook whether it is a
+  stranger or a saved contact.
+- The store is resolved per principal, in two places that cannot be bypassed:
+  `coreTools` takes a `memoryFor(principal)` resolver, and `memory_read`, `memory_write`
+  and `journal_append` use it for every read and write. The owner always resolves to the
+  owner's store whatever the resolver says, so the resolver only ever has to know how to
+  key a non-owner. `boot.ts` wires it on a public agent and leaves it out on a private one.
+- The prompt follows: on a public agent a non-owner gets *their own* notebook in the system
+  prompt under `## <name>'s notebook (kept for them on this host)`, with the instruction
+  never to mix it with anyone else's or with the host's, and the owner's digest is not
+  reachable from that conversation at all.
+- `PUBLIC_GUEST_TIER` now opens `memory.write` for a sender on a public agent, exactly
+  because that capability is now person-scoped. The owner's notebook stays closed: nothing
+  in the tier table hands a non-owner the owner's store, and `owner.profile.preferences`
+  is still denied.
+- Tests prove the isolation rather than assuming it: `packages/core/test/memory.test.ts`
+  (two people, two paths, same person the same path), `core-tools.test.ts` (the resolver
+  sends a person's write to their own file, the owner's write to `MEMORY.md`),
+  `runtime.test.ts` (person A's note appears in A's prompt and never in B's or the owner's,
+  end to end through a real inbound message with the real tools registered), and `pnpm
+  smoke` drives two unknown numbers through the HTTP surface and checks both notebooks plus
+  the untouched `MEMORY.md`.
+- The persona in `deploy/demo-agent/PERSONA.md` says it in the agent's own words: everyone
+  who messages you gets a personal agent of their own here, with their own notebook on this
+  host. `docs/PRIVACY-MODEL.md` and `docs/PERMISSIONS.md` describe where that notebook sits
+  and what it does not touch.
+
+What this does not change: the owner's agent is still private by default (no `public`, no
+notebooks for anyone else), and a notebook is a file on the same host, not an encrypted
+store. A hosted public agent should be its own machine and its own identity — which is
+exactly how the deployed one runs.
+
 ## How judges test the agent
 
 1. Text **`connect @sealai`** to the Inkbox router at **+16504849720** (or, to
    test the memory vault directly, email `sealai@inkboxmail.com`).
-2. Ask it to remember something, then ask it to prove a fact about that memory.
-   The plaintext stays on the host; the reply is a proof reference you can check
-   yourself.
+2. Tell it your name and something it should remember, ask it what it knows about
+   you, then ask it to prove a fact about a memory. The plaintext stays on the
+   host; the reply is a proof reference you can check yourself.
 3. Verify a proof with no wallet: open the link the reply gives you
    (`https://sealai.inkboxwire.com/verify/<attestationId>`) or run
    `instinct midnight verify <attestationId>`. A valid proof reports the

@@ -28,14 +28,14 @@ door already prefills the newest one (at the time of writing,
 | Time | On screen | Say |
 |---|---|---|
 | 0:00-0:15 | The repo README, Seal lockup | "Seal is a personal agent you text. It remembers for you, and proves things about your memories on Midnight without revealing them." |
-| 0:15-0:35 | Phone: text Seal a private fact | "I tell it something private." Show the agent acknowledging it will keep it. |
+| 0:15-0:35 | Phone: text Seal a private fact. If you have a second number, have a second person text it too, then show `ls /data/memory/people` in a terminal | "Everyone who texts Seal gets a personal agent of their own: a notebook of their own on this host, one per person, and a vault scope of their own. One person's notes never mix with another's. I tell it something private here." |
 | 0:35-0:55 | Terminal: the commit lands | "That memory is saved on my device and anchored on Midnight as an opaque commitment. The words never leave this machine." |
 | 0:55-1:15 | `instinct midnight verify <attestationId>` | "Now a stranger checks the proof. No wallet, no seed, no cooperation from the agent." |
 | 1:15-1:30 | The verify output, then the same id on the hosted page in a browser | "Valid health proof, single-use. It reveals the category I chose and nothing else, and it cannot be replayed. A stranger opens the link the agent put in its reply and sees the same read — the page is public and read-only, and it says which mode the agent is in." |
 | 1:30-1:50 | The allowance commands, live | "Here is the part a policy file cannot promise." authorize $50, spend $20, then attempt $40. |
 | 1:50-2:05 | `failed assert: over allowance` | "Refused by the circuit, not by the agent's code. Even a prompt-injected agent cannot talk its way past it." |
 | 2:05-2:20 | README two-ledger diagram | "One ledger holds commitments and limits. The other holds my actual words. That split is the whole product." |
-| 2:20-2:30 | Preprod addresses on screen | "Both contracts are live on Preprod, with 1011 tests behind them. The repo and the verify transcript are public." |
+| 2:20-2:30 | Preprod addresses on screen | "Both contracts are live on Preprod, with 1014 tests behind them. The repo and the verify transcript are public." |
 
 ## Exact commands for the two live beats
 

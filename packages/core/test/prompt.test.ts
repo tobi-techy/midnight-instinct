@@ -58,13 +58,13 @@ describe("buildSystemPrompt", () => {
     expect(stranger).toContain("Do not run tasks for them");
   });
 
-  it("casts an unknown sender as a guest on a public demo agent", () => {
+  it("gives an unknown sender their own agent on a public agent", () => {
     const config = testConfig();
     config.agent = { ...config.agent, public: true };
     const p = buildSystemPrompt(input({ config, principal: principalOf("stranger") }));
-    expect(p).toContain("a public demo agent built on Open Instinct");
-    expect(p).toContain("is trying you out");
-    expect(p).toContain("remember what they tell you");
+    expect(p).toContain("a personal agent built on Open Instinct, hosted by");
+    expect(p).toContain("They are your person, not a stranger to turn away");
+    expect(p).toContain("remember what they tell you in their own notebook");
     expect(p).not.toContain("Do not run tasks for them");
     expect(p).not.toContain("Allergic to shellfish");
     expect(p).not.toContain("+16175550100");

@@ -199,8 +199,9 @@ curl -s 127.0.0.1:8080/chat -H "authorization: Bearer $INSTINCT_CHAT_TOKEN" -H '
 
 Without `PORT` the server listens on `127.0.0.1:8080`; the token is optional on loopback
 but cheap to set. With an Inkbox identity, add `INKBOX_API_KEY`, `INKBOX_AGENT_HANDLE` and
-`INSTINCT_TUNNEL=1`. The server prints the tunnel URL (it serves webhooks only) and, when
-`INKBOX_ADMIN_API_KEY` is set, subscribes `imessage.received`, `text.received`,
+`INSTINCT_TUNNEL=1`. The server prints the tunnel URL (it serves `/webhooks/inkbox`, plus
+`/health` and the read-only proof verifier at `/verify`; the owner's surface stays on loopback)
+and, when `INKBOX_ADMIN_API_KEY` is set, subscribes `imessage.received`, `text.received`,
 `message.received` and the A2A events to `<url>/webhooks/inkbox`. The signing key is
 stored in `<data>/secrets/webhook.json` (mode 0600).
 
@@ -220,6 +221,14 @@ temp directory with Pi's faux provider (no network, no keys) and checks:
    only allowed tool call is `notify_owner`, the owner gets exactly one iMessage through the
    outbox, exactly one A2A reply completes the task with the inbound `replyRef`, and nothing
    from `MEMORY.md` appears in either message.
+5. `create_pdf` and `send_file`: a real PDF lands in the workspace and the reply carries its
+   path or the `maritime-file` block.
+6. A public agent (`INSTINCT_AGENT_PUBLIC=1`): the same unknown number that was turned away in
+   step 2 gets a conversation, a note filed in its own notebook
+   (`memory/people/<hash>/MEMORY.md`, with the owner's `MEMORY.md` untouched), a scoped
+   `vault_commit`, a proof, and a proof that verifies over the tunnel listener as JSON and as a
+   page — including the `/verify` front door and its `?id=` handoff. A second unknown number gets
+   a second notebook, and neither can see the other's.
 
 It exits non-zero on any failed check.
 

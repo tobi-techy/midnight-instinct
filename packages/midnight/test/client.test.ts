@@ -178,16 +178,16 @@ describe("persistence and shielded memory", () => {
 });
 
 describe("vault scopes", () => {
-  const GUEST_SCOPE = "stranger:imessage:+15559998777";
+  const PERSON_SCOPE = "stranger:imessage:+15559998777";
 
   it("lets each scope prove only its own commitments", async () => {
     const { client } = makeClient();
     const owner = await client.commit({ text: "owner secret", category: "health" });
-    const guest = await client.commit({ text: "a guest note", category: "other", scope: GUEST_SCOPE });
+    const person = await client.commit({ text: "a person's note", category: "other", scope: PERSON_SCOPE });
     await expect(client.prove({ commitment: owner.commitment })).resolves.toMatchObject({ disclosed: 0 });
-    await expect(client.prove({ commitment: guest.commitment, scope: GUEST_SCOPE })).resolves.toMatchObject({ disclosed: 0 });
-    await expect(client.prove({ commitment: owner.commitment, scope: GUEST_SCOPE })).rejects.toThrow(/another vault scope/);
-    await expect(client.prove({ commitment: guest.commitment })).rejects.toThrow(/another vault scope/);
+    await expect(client.prove({ commitment: person.commitment, scope: PERSON_SCOPE })).resolves.toMatchObject({ disclosed: 0 });
+    await expect(client.prove({ commitment: owner.commitment, scope: PERSON_SCOPE })).rejects.toThrow(/another vault scope/);
+    await expect(client.prove({ commitment: person.commitment })).rejects.toThrow(/another vault scope/);
   });
 
   it("treats a state file written before scopes as the owner's", async () => {
@@ -195,15 +195,15 @@ describe("vault scopes", () => {
     const c = await client.commit({ text: "legacy row", category: "other" });
     delete state().commitments[c.commitment]!.scope;
     await expect(client.prove({ commitment: c.commitment })).resolves.toMatchObject({ disclosed: 0 });
-    await expect(client.prove({ commitment: c.commitment, scope: GUEST_SCOPE })).rejects.toThrow(/another vault scope/);
+    await expect(client.prove({ commitment: c.commitment, scope: PERSON_SCOPE })).rejects.toThrow(/another vault scope/);
   });
 
-  it("does not hand a guest another scope's commitment for the same text and salt", async () => {
+  it("does not hand one person another scope's commitment for the same text and salt", async () => {
     const { client } = makeClient();
     const salt = "a".repeat(64);
     const owner = await client.commit({ text: "same words", category: "other", salt });
-    const guest = await client.commit({ text: "same words", category: "other", salt, scope: GUEST_SCOPE });
-    expect(guest.commitment).not.toBe(owner.commitment);
+    const person = await client.commit({ text: "same words", category: "other", salt, scope: PERSON_SCOPE });
+    expect(person.commitment).not.toBe(owner.commitment);
     await expect(client.prove({ commitment: owner.commitment })).resolves.toMatchObject({ disclosed: 0 });
   });
 });

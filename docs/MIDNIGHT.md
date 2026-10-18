@@ -23,7 +23,7 @@ owner already texts.
 
 | Data | Where it lives | On-ledger? |
 |---|---|---|
-| Memory text | `memory/MEMORY.md` on the agent host | No |
+| Memory text | `memory/MEMORY.md` on the agent host, or `memory/people/<hash>/MEMORY.md` for someone else's notebook | No |
 | Preimage (`sha256(text)`) | Circuit input only | No |
 | Commitment (`persistentCommit(preimage, salt)`, computed in-circuit) | Midnight ledger | Yes |
 | Owner binding (`persistentCommit(ownerSecret, commitment)`) | Midnight ledger | Yes |
@@ -174,14 +174,17 @@ JSON `POST`s, because every write submits a real transaction from its wallet.
 
 | Tool | Capability | What it does |
 |---|---|---|
-| `vault_commit` | `memory.write` | Save a durable memory locally and anchor its commitment |
-| `vault_prove_reveal` | `memory.write` | Selective-disclosure proof: category or bare existence |
+| `vault_commit` | `vault.write` | Save a durable memory locally and anchor its commitment |
+| `vault_prove_reveal` | `vault.write` | Selective-disclosure proof: category or bare existence |
 | `vault_status` | `memory.write` | Mode, contract addresses, anchor counts |
 | `allowance_check` | `purchase` | ZK-gated spend against an allowance (stretch) |
 
-Capabilities are checked by the existing policy engine, so tiers keep working
-unchanged: a stranger never sees these tools, a partner cannot commit, and only
-the owner speaks for the vault.
+Capabilities are checked by the existing policy engine, so tiers keep working: a
+stranger on a private agent never sees these tools and a partner cannot commit.
+`vault.write` is separate from `memory.write` because the vault and the notebook are
+different stores; on a public agent (`INSTINCT_AGENT_PUBLIC=1`) a sender may commit and
+prove inside a vault scope of their own, while `vault_status`, the allowance and the
+owner's notebook stay out of reach ([PERMISSIONS.md](PERMISSIONS.md)).
 
 ## Running it
 

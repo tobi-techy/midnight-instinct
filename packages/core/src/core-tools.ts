@@ -14,10 +14,17 @@ import { wrapUntrusted } from "./prompt.js";
 import type { Outbox } from "./runtime.js";
 import type { Scheduler } from "./scheduler.js";
 import { defineTool, textResult, type RegisteredTool, type ToolContext, type ToolResultLike } from "./tools.js";
-import type { AuditKind, InstinctConfig } from "./types.js";
+import type { AuditKind, InstinctConfig, Principal } from "./types.js";
 
 export interface CoreToolDeps {
   memory: MemoryStore;
+  /**
+   * The notebook of the caller, when it is not the owner's. A public agent answers
+   * whoever texts it, so each person gets their own file: the resolver must never
+   * return the owner's store for a non-owner, and the memory tools below use it for
+   * every read and write.
+   */
+  memoryFor?: (principal: Principal) => MemoryStore;
   scheduler: Scheduler;
   approvals: ApprovalStore;
   audit: AuditLog;
@@ -54,9 +61,12 @@ export function coreTools(deps: CoreToolDeps): RegisteredTool[] {
 // Memory
 // ---------------------------------------------------------------------------
 
-function memoryTools({ memory }: CoreToolDeps): RegisteredTool[] {
-  // Memory holds the owner's private notes, so reading it needs the same capability as
-  // writing it. The prompt digest already gives the model what it needs for most turns.
+function memoryTools({ memory, memoryFor }: CoreToolDeps): RegisteredTool[] {
+  // Memory holds private notes, so reading it needs the same capability as writing it.
+  // Whose notes depends on who is asking: the owner always gets their own notebook, and
+  // nobody else can, whatever the resolver is handed; anyone else gets theirs.
+  const storeFor = (ctx: ToolContext): MemoryStore =>
+    ctx.principal.kind === "owner" ? memory : memoryFor?.(ctx.principal) ?? memory;
   const memoryRead = defineTool({
     name: "memory_read",
     label: "Read memory",
@@ -64,8 +74,9 @@ function memoryTools({ memory }: CoreToolDeps): RegisteredTool[] {
     parameters: Type.Object({ section: Type.Optional(Type.String({ description: "\"durable\" (default) or \"journal\"" })) }),
     meta: { capabilities: ["memory.write"], group: "memory" },
     execute: async ({ section }, ctx) => {
-      if (section?.toLowerCase() === "journal") return textResult(memory.readJournal(ctx.now()) || "(journal is empty today)");
-      return textResult(memory.readDurable() || "(memory is empty)");
+      const store = storeFor(ctx);
+      if (section?.toLowerCase() === "journal") return textResult(store.readJournal(ctx.now()) || "(journal is empty today)");
+      return textResult(store.readDurable() || "(memory is empty)");
     },
   });
 
@@ -79,11 +90,12 @@ function memoryTools({ memory }: CoreToolDeps): RegisteredTool[] {
     }),
     meta: { capabilities: ["memory.write"], group: "memory", describe: (a) => `remember: ${argText(a, "text")}` },
     execute: async ({ text, durable }, ctx) => {
+      const store = storeFor(ctx);
       if (durable) {
-        memory.appendDurable(text.trim());
+        store.appendDurable(text.trim());
         return textResult("Saved to durable memory.");
       }
-      memory.appendJournal(text.trim(), ctx.now());
+      store.appendJournal(text.trim(), ctx.now());
       return textResult("Noted in today's journal.");
     },
   });
@@ -95,7 +107,7 @@ function memoryTools({ memory }: CoreToolDeps): RegisteredTool[] {
     parameters: Type.Object({ text: Type.String() }),
     meta: { capabilities: ["memory.write"], group: "memory", describe: (a) => `journal: ${argText(a, "text")}` },
     execute: async ({ text }, ctx) => {
-      memory.appendJournal(text.trim(), ctx.now());
+      storeFor(ctx).appendJournal(text.trim(), ctx.now());
       return textResult("Journaled.");
     },
   });

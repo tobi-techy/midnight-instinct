@@ -70,37 +70,44 @@ spend policy, otherwise ask · `no` denied.
 The table lives in `packages/core/src/policy.ts`. A test checks the rows with special values against
 this file, so change both together.
 
-## Public demo agents
+## Public agents
 
-An agent deployed with `INSTINCT_AGENT_PUBLIC=1` is a demo surface: it is meant to answer anyone
-who messages it, so an unknown sender is a guest rather than a stranger. `config.agent.public`
-(seeded from that variable on first boot, like the other `INSTINCT_*` variables) opens three
-capabilities on the stranger row and raises the stranger rate limits. Nothing else moves.
+An agent deployed with `INSTINCT_AGENT_PUBLIC=1` is a public surface: it is meant to answer anyone
+who messages it, so an unknown sender gets a personal agent of their own rather than a one-line
+introduction. `config.agent.public` (seeded from that variable on first boot, like the other
+`INSTINCT_*` variables) opens four capabilities on the stranger row and raises the stranger rate
+limits. Nothing else moves.
 
-| Stranger row | private agent | public demo agent |
+| Stranger row | private agent | public agent |
 |---|---|---|
 | `converse` | intro only | yes |
 | `owner.relay` | yes, 3/day | yes, 50/day |
-| `vault.write` | no | yes, in the guest's own vault scope |
+| `memory.write` | no | yes, into the sender's own notebook |
+| `vault.write` | no | yes, in the sender's own vault scope |
 | `web.read` | no | yes |
 | Stranger limits | 3 conversations a day, 10 messages each | 50 conversations a day, 40 messages each |
 
-`vault.write` is the vault, not the notebook: a guest may anchor a shielded commitment and prove
-it later without revealing it, inside a scope keyed to their own principal. The scope is hashed
+`memory.write` is the notebook: the runtime and the memory tools resolve a non-owner to
+`memory/people/<sha256 of their address>/MEMORY.md`, so what one person tells the agent is
+theirs and never lands in the owner's `MEMORY.md` or in another person's file. The owner's
+notebook is the one store a sender cannot reach, whatever they say to the agent.
+
+`vault.write` is the chain-facing half: a sender may anchor a shielded commitment and prove it
+later without revealing it, inside a scope keyed to their own principal. The scope is hashed
 with the vault key before it is written down, so the state file never records who anchored what,
-and `vault_prove_reveal` refuses a commitment anchored in someone else's scope. A guest's text
-stays in the conversation: it does not enter the owner's `MEMORY.md`, and `memory.write` stays
-closed, which also keeps `memory_read`, `memory_write` and `vault_status` out of a guest's hands.
+and `vault_prove_reveal` refuses a commitment anchored in someone else's scope. The committed
+plaintext stays in the conversation; the notebook is the store for what they ask in words.
+`vault_status`, the allowance tools and everything else that reads the owner's vault stay closed.
 
 Everything about the owner stays closed: `owner.profile.public`, `owner.profile.preferences`,
 location, calendar, mail, contacts, plans, spend, `computer.use`, `files.read`, `files.write`,
-`apps.use` and `network.*` are denied to a guest exactly as they are to a stranger. That is the
-point of a demo agent: a prompt injection into it must not reach the owner or the host it runs on.
+`apps.use` and `network.*` are denied to a sender exactly as they are to a stranger. That is the
+point of a public agent: a prompt injection into it must not reach the owner or the host it runs on.
 
-The prompt follows the policy: with `public` set, the identity layer says so and the principal
-layer describes the unknown sender as a guest to help rather than a stranger to turn away. Run a
-demo agent as its own identity and its own process, so guests share that agent and its memory and
-never the owner's.
+The prompt follows the policy: with `public` set, the identity layer says this agent belongs to
+whoever is talking, and the principal layer describes the unknown sender as that agent's own
+person rather than a stranger to turn away. Run a public agent as its own identity and its own
+process, so senders share that agent and its code and never the owner's notebook.
 
 `web.read` and `apps.use` are transport capabilities. The specific capability on the same tool
 (`calendar.freebusy`, `email.send`, ...) does the real gating; these two only say who may use the

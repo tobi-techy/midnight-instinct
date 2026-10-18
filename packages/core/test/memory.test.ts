@@ -77,4 +77,27 @@ describe("MemoryStore", () => {
     expect(d).not.toContain("Sam");
     expect(store.preferencesDigest(20).length).toBeLessThanOrEqual(24);
   });
+
+  it("keeps one notebook per person under a hashed name, separate from the owner's", () => {
+    const state = tempState();
+    const owner = new MemoryStore(state);
+    const alex = MemoryStore.forPerson(state, "+12125550001");
+    const pat = MemoryStore.forPerson(state, "+12125550002");
+    const alexAgain = MemoryStore.forPerson(state, "  +12125550001 ");
+
+    expect(owner.durablePath()).toBe("memory/MEMORY.md");
+    expect(alex.durablePath()).toMatch(/^memory\/people\/[0-9a-f]{32}\/MEMORY\.md$/);
+    expect(alex.durablePath()).toBe(alexAgain.durablePath()); // same person, same file
+    expect(alex.durablePath()).not.toBe(pat.durablePath());
+    expect(alex.durablePath()).not.toContain("+12125550001"); // the phone number is not the path
+
+    alex.appendDurable("Alex sails on weekends.");
+    alex.appendJournal("Alex asked about tides.", new Date(2026, 9, 3, 12, 0));
+    expect(state.exists("memory/people/" + alex.durablePath().split("/")[2] + "/journal/2026-10-03.md")).toBe(true);
+    expect(alex.readDurable()).toContain("Alex sails on weekends.");
+    expect(alex.digest(4000, new Date(2026, 9, 3, 12, 0))).toContain("tides");
+    // Nothing of Alex's reaches the owner's file or Pat's.
+    expect(owner.readDurable()).toBe("");
+    expect(pat.readDurable()).toBe("");
+  });
 });

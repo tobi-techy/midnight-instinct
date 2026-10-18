@@ -53,7 +53,8 @@ it a shielded memory vault on Midnight. Four verbs:
    live allowance before a gated action runs, and fails closed if the ledger
    cannot be reached, so the limit holds outside the agent's own code.
 
-The plaintext stays in `MEMORY.md`; the chain sees commitments, owner bindings,
+The plaintext stays in a notebook: `MEMORY.md` for the owner, `memory/people/<hash>/MEMORY.md`
+for anyone the agent talks to; the chain sees commitments, owner bindings,
 a hiding commitment to each memory's category (the plain code appears only when
 the owner attests it), and nullifiers. The full inventory is in
 [PRIVACY-MODEL.md](PRIVACY-MODEL.md).
@@ -143,7 +144,7 @@ file the agent could talk its way around.
 
 - Contracts compile with the Midnight Compact toolchain 0.31.1 (language 0.23):
   `pnpm run contracts:check`.
-- **1011 tests across 10 packages**: core 233, apps 147, inkbox 149, server 110,
+- **1014 tests across 10 packages**: core 236, apps 147, inkbox 149, server 110,
   cli 84, gateway 67, payments 66, network 65, computer 43, midnight 47. Plus
   **13 Compact-runtime simulator tests** (`deploy/midnight-devnet`, 2 files) and
   an indexer-backed end-to-end check.
@@ -166,7 +167,7 @@ file the agent could talk its way around.
 | Criterion | Where it shows |
 |---|---|
 | Engineering & implementation | `contracts/` (two Compact contracts, private state, `disclose()` boundaries), `packages/midnight/`, the adapter, the verifier path; genuine private state in `witnesses.ts` |
-| Quality assurance & reliability | 1011 tests plus 13 simulator tests and an indexer-backed e2e check; the sync fix and its diagnostic layer, proven by the 17-hour Preprod run |
+| Quality assurance & reliability | 1014 tests plus 13 simulator tests and an indexer-backed e2e check; the sync fix and its diagnostic layer, proven by the 17-hour Preprod run |
 | Product & vision | a working agent, not a demo dApp; commit, prove, verify, spend is a coherent story |
 | User experience & design | the primary UX is iMessage; a web console proves the same model visually |
 | Communication | `docs/MIDNIGHT.md`, `ARCH-MIDNIGHT.md`, `PRIVACY-MODEL.md`, this brief |

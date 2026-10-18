@@ -2,7 +2,8 @@
  * End-to-end smoke test with Pi's faux provider: no network, no API keys.
  * Boots a real agent into a temp data dir, drives it over HTTP and checks the
  * owner flow, the stranger flow, the schedule flow, a stranger's A2A task and a
- * public demo agent's guest flow. Exits non-zero on failure.
+ * public agent's flow, where two different senders get their own notebook and vault
+ * scope. Exits non-zero on failure.
  */
 import { mkdtempSync, readFileSync, realpathSync, rmSync, existsSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -10,7 +11,7 @@ import { join } from "node:path";
 import type { AddressInfo } from "node:net";
 import { createModels, fauxAssistantMessage, fauxProvider, fauxToolCall } from "@earendil-works/pi-ai";
 import type { StreamFn } from "@earendil-works/pi-agent-core";
-import { AuditLog, ContactStore, encodeEvent, resolvePrincipal } from "@open-instinct/core";
+import { AuditLog, ContactStore, encodeEvent, MemoryStore, resolvePrincipal } from "@open-instinct/core";
 import type { InboundMessage, OutboundMessage, Outbox, Principal } from "@open-instinct/core";
 import { encodeOip } from "@open-instinct/network";
 import { boot } from "./boot.js";
@@ -18,8 +19,9 @@ import { closeInkboxInbox, createHttpServer, listenTunnelServer } from "./http.j
 
 const OWNER_PHONE = "+15550001111";
 const STRANGER_PHONE = "+15559998888";
-/** A number no contact and no owner row knows: on a demo agent this is a guest. */
-const GUEST_PHONE = "+15559998777";
+/** Numbers no contact and no owner row knows: on a public agent these are two people. */
+const ALEX_PHONE = "+15559998777";
+const PAT_PHONE = "+15559998766";
 const STRANGER_AGENT = "unknown-agent";
 const A2A_TASK = "task_smoke_1";
 const A2A_CONTEXT = "ctx_smoke_1";
@@ -234,59 +236,78 @@ async function main(): Promise<void> {
     check(sent !== undefined && sent.isError === false && (sent.result ?? "").includes(pdfAbsolute), `send_file answered with the file's path (got ${JSON.stringify(sent?.result)})`);
     check(typeof pdfChat.json.response === "string" && (pdfChat.json.response.includes("```maritime-file") || pdfChat.json.response.includes(pdfAbsolute)), "the reply carries the maritime-file block or the path");
 
-    console.log("6. a public demo agent treats an unknown number as a guest");
-    // INSTINCT_AGENT_PUBLIC marks an agent that answers anyone. The same unknown sender
-    // who was turned away in step 2 now gets a conversation and the vault in their own
-    // scope, while the owner's notebook, profile and contacts stay out of reach.
-    const guestDir = mkdtempSync(join(tmpdir(), "instinct-smoke-guest-"));
-    const guestEnv: NodeJS.ProcessEnv = { ...env, INSTINCT_DATA_DIR: guestDir, INSTINCT_AGENT_NAME: "Seal Demo", INSTINCT_AGENT_PUBLIC: "1", MIDNIGHT_MODE: "mock" };
-    const guestOutbox = new RecordingOutbox();
-    const guest = await boot(guestEnv, { model: faux.getModel("faux-1"), streamFn, outbox: guestOutbox, logger: quiet });
-    const guestServer = createHttpServer(guest, { env: guestEnv, logger: quiet });
-    await new Promise<void>((resolve) => guestServer.listen(0, "127.0.0.1", () => resolve()));
-    const guestBase = `http://127.0.0.1:${(guestServer.address() as AddressInfo).port}`;
-    try {
-      check(guest.config.agent.public === true, "the flag reaches config.json");
-      faux.setResponses([
-        fauxAssistantMessage([fauxToolCall("vault_commit", { text: "guest likes the demo", category: "preference" })], { stopReason: "toolUse" }),
-        fauxAssistantMessage("Anchored. Ask me to prove it whenever you like."),
-      ]);
-      const guestEvent = {
+    console.log("6. a public agent gives whoever texts their own notebook and their own vault scope");
+    // INSTINCT_AGENT_PUBLIC marks an agent that answers anyone. Two unknown numbers the
+    // owner was turned away from in step 2 now each get a conversation, their own notebook
+    // under memory/people/ and the vault in their own scope, while the owner's notebook,
+    // profile and contacts stay out of reach and stay untouched.
+    const personDir = mkdtempSync(join(tmpdir(), "instinct-smoke-person-"));
+    const personEnv: NodeJS.ProcessEnv = { ...env, INSTINCT_DATA_DIR: personDir, INSTINCT_AGENT_NAME: "Seal Demo", INSTINCT_AGENT_PUBLIC: "1", MIDNIGHT_MODE: "mock" };
+    const personOutbox = new RecordingOutbox();
+    const person = await boot(personEnv, { model: faux.getModel("faux-1"), streamFn, outbox: personOutbox, logger: quiet });
+    const personServer = createHttpServer(person, { env: personEnv, logger: quiet });
+    await new Promise<void>((resolve) => personServer.listen(0, "127.0.0.1", () => resolve()));
+    const personBase = `http://127.0.0.1:${(personServer.address() as AddressInfo).port}`;
+    const alexNotebook = MemoryStore.forPerson(person.state, ALEX_PHONE);
+    const patNotebook = MemoryStore.forPerson(person.state, PAT_PHONE);
+    const messageFrom = async (number: string, id: string, conversationId: string, content: string): Promise<number> => {
+      const e = {
         ...event,
-        id: "evt_smoke_guest_1",
-        data: {
-          ...event.data,
-          message: { ...event.data.message, id: "msg_smoke_guest_1", conversation_id: "conv_guest", remote_number: GUEST_PHONE, content: "Hi. Can you remember something for me?" },
-        },
+        id: `evt_smoke_${id}`,
+        data: { ...event.data, message: { ...event.data.message, id: `msg_smoke_${id}`, conversation_id: conversationId, remote_number: number, content } },
       };
-      const beforeGuest = guestOutbox.sent.length;
-      const guestRes = await fetch(`${guestBase}/chat`, {
+      const before = personOutbox.sent.length;
+      const res = await fetch(`${personBase}/chat`, {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ message: encodeEvent(guestEvent), source: "front_door", conversation_id: "conv_guest" }),
+        body: JSON.stringify({ message: encodeEvent(e), source: "front_door", conversation_id: conversationId }),
       });
-      check(guestRes.status === 200, `the guest's envelope is accepted (got ${guestRes.status})`);
-      await settle(() => guestOutbox.sent.length > beforeGuest, 5000);
-      const guestSends = guestOutbox.sent.slice(beforeGuest).filter((s) => s.msg.channel === "imessage" && s.conversationKey === "imessage:conv_guest");
-      check(guestSends.length === 1, `the guest got exactly one iMessage reply (got ${guestSends.length})`);
-      const guestMemoryFile = join(guestDir, "memory", "MEMORY.md");
-      const guestMemory = existsSync(guestMemoryFile) ? readFileSync(guestMemoryFile, "utf8") : "";
-      check(!guestMemory.includes("guest likes the demo"), "the guest's note stayed out of the owner's notebook");
-      const guestCalls = new AuditLog(guest.state)
+      await settle(() => personOutbox.sent.length > before, 5000);
+      return res.status;
+    };
+    try {
+      check(person.config.agent.public === true, "the flag reaches config.json");
+      faux.setResponses([
+        fauxAssistantMessage([fauxToolCall("memory_write", { text: "Alex likes the demo.", durable: true })], { stopReason: "toolUse" }),
+        fauxAssistantMessage([fauxToolCall("vault_commit", { text: "alex likes the demo", category: "preference" })], { stopReason: "toolUse" }),
+        fauxAssistantMessage("Anchored. Ask me to prove it whenever you like."),
+      ]);
+      const beforeAlex = personOutbox.sent.length;
+      const alexStatus = await messageFrom(ALEX_PHONE, "alex_1", "conv_alex", "Hi. Can you remember something for me?");
+      check(alexStatus === 200, `the sender's envelope is accepted (got ${alexStatus})`);
+      const alexSends = personOutbox.sent.slice(beforeAlex).filter((s) => s.msg.channel === "imessage" && s.msg.conversationKey === "imessage:conv_alex");
+      check(alexSends.length === 1, `the sender got exactly one iMessage reply (got ${alexSends.length})`);
+      check(alexNotebook.durablePath().startsWith("memory/people/") && person.state.exists(alexNotebook.durablePath()), `their note went to their own notebook (${alexNotebook.durablePath()})`);
+      check(alexNotebook.readDurable().includes("Alex likes the demo."), "the notebook holds what they said");
+      const ownerMemoryFile = join(personDir, "memory", "MEMORY.md");
+      const ownerMemory = existsSync(ownerMemoryFile) ? readFileSync(ownerMemoryFile, "utf8") : "";
+      check(!ownerMemory.includes("alex likes the demo"), "the sender's note stayed out of the owner's notebook");
+      // A second person, a different notebook, and no leakage either way.
+      faux.setResponses([
+        fauxAssistantMessage([fauxToolCall("memory_write", { text: "Pat keeps bees.", durable: true })], { stopReason: "toolUse" }),
+        fauxAssistantMessage("Noted, Pat."),
+      ]);
+      const otherStatus = await messageFrom(PAT_PHONE, "other_1", "conv_other", "I keep bees. Remember that.");
+      check(otherStatus === 200, `a second sender is accepted too (got ${otherStatus})`);
+      check(alexNotebook.durablePath() !== patNotebook.durablePath(), "each person gets a notebook of their own");
+      check(patNotebook.readDurable().includes("Pat keeps bees"), "the second notebook holds the second person's note");
+      check(!patNotebook.readDurable().includes("Alex likes the demo."), "one person's note never lands in another's notebook");
+      check(!alexNotebook.readDurable().includes("bees"), "and the first person's notebook holds only their own");
+      const personCalls = new AuditLog(person.state)
         .read({ kinds: ["tool_call"] })
-        .filter((e) => e.conversationKey === "imessage:conv_guest")
+        .filter((e) => e.conversationKey === "imessage:conv_alex")
         .map((e) => e.detail as { tool?: string; isError?: boolean; result?: string });
-      const anchored = guestCalls.find((c) => c.tool === "vault_commit");
+      const anchored = personCalls.find((c) => c.tool === "vault_commit");
       check(
         anchored !== undefined && anchored.isError === false && /Anchored for this conversation/.test(anchored.result ?? ""),
-        `vault_commit anchored the guest's note in the guest's own scope (got ${JSON.stringify(anchored)})`,
+        `vault_commit anchored the person's note in the person's own scope (got ${JSON.stringify(anchored)})`,
       );
-      const midnightFile = join(guestDir, "midnight.json");
+      const midnightFile = join(personDir, "midnight.json");
       const midnightState = existsSync(midnightFile) ? (JSON.parse(readFileSync(midnightFile, "utf8")) as { commitments?: Record<string, { scope?: string }> }) : {};
       const commitments = Object.values(midnightState.commitments ?? {});
       check(commitments.length === 1 && Boolean(commitments[0]?.scope), `one scoped commitment is on record (got ${JSON.stringify(commitments)})`);
 
-      // The guest asks for a proof, then anyone checks it over the public tunnel surface.
+      // The person asks for a proof, then anyone checks it over the public tunnel surface.
       const commitment = Object.keys(midnightState.commitments ?? {})[0] ?? "";
       check(/^[0-9a-f]{64}$/.test(commitment), `the commitment is 64 hex (got ${commitment})`);
       faux.setResponses([
@@ -295,20 +316,20 @@ async function main(): Promise<void> {
       ]);
       const proofEvent = {
         ...event,
-        id: "evt_smoke_guest_2",
+        id: "evt_smoke_alex_2",
         data: {
           ...event.data,
-          message: { ...event.data.message, id: "msg_smoke_guest_2", conversation_id: "conv_guest", remote_number: GUEST_PHONE, content: "Prove you remembered, without telling me what it says." },
+          message: { ...event.data.message, id: "msg_smoke_alex_2", conversation_id: "conv_alex", remote_number: ALEX_PHONE, content: "Prove you remembered, without telling me what it says." },
         },
       };
-      const beforeProof = guestOutbox.sent.length;
-      const proofRes = await fetch(`${guestBase}/chat`, {
+      const beforeProof = personOutbox.sent.length;
+      const proofRes = await fetch(`${personBase}/chat`, {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ message: encodeEvent(proofEvent), source: "front_door", conversation_id: "conv_guest" }),
+        body: JSON.stringify({ message: encodeEvent(proofEvent), source: "front_door", conversation_id: "conv_alex" }),
       });
-      check(proofRes.status === 200, `the guest's second envelope is accepted (got ${proofRes.status})`);
-      await settle(() => guestOutbox.sent.length > beforeProof, 5000);
+      check(proofRes.status === 200, `the person's second envelope is accepted (got ${proofRes.status})`);
+      await settle(() => personOutbox.sent.length > beforeProof, 5000);
       const midnightAfter = JSON.parse(readFileSync(midnightFile, "utf8")) as { nullifiers?: Record<string, { disclosed?: number }> };
       const attestationId = Object.keys(midnightAfter.nullifiers ?? {})[0] ?? "";
       check(/^[0-9a-f]{64}$/.test(attestationId), `the proof left a single-use attestation id (got ${attestationId})`);
@@ -316,7 +337,7 @@ async function main(): Promise<void> {
 
       // The Inkbox tunnel reaches a second, loopback-only listener. The verifier is the
       // one read-only route on it besides /health and the webhook.
-      const tunnel = await listenTunnelServer(guest, { signingKey: "smoke-signing-key", env: guestEnv, logger: quiet });
+      const tunnel = await listenTunnelServer(person, { signingKey: "smoke-signing-key", env: personEnv, logger: quiet });
       const tunnelBase = `http://127.0.0.1:${(tunnel.address() as AddressInfo).port}`;
       try {
         const verified = await fetch(`${tunnelBase}/verify/${attestationId}`);
@@ -337,24 +358,28 @@ async function main(): Promise<void> {
       } finally {
         await new Promise<void>((resolve) => tunnel.close(() => resolve()));
       }
-      const guestPrincipal = resolvePrincipal(
-        { id: "msg_smoke_guest_1", conversationKey: "imessage:conv_guest", text: "hi", from: GUEST_PHONE, channel: "imessage", replyRef: {}, receivedAt: new Date().toISOString() } as InboundMessage,
-        guest.config,
-        new ContactStore(guest.state),
+      const alexPrincipal = resolvePrincipal(
+        { id: "msg_smoke_alex_1", conversationKey: "imessage:conv_alex", text: "hi", from: ALEX_PHONE, channel: "imessage", replyRef: {}, receivedAt: new Date().toISOString() } as InboundMessage,
+        person.config,
+        new ContactStore(person.state),
       );
-      const prompt = guest.runtime.conversation("imessage:conv_guest", guestPrincipal).agent.state.systemPrompt;
-      check(prompt.includes("a public demo agent built on Open Instinct"), "the guest prompt says this is a public demo agent");
-      check(prompt.includes("is trying you out"), "the guest prompt describes the sender as a guest");
-      check(!prompt.includes("Do not run tasks for them"), "the guest prompt does not turn the sender away");
-      check(prompt.includes("Share nothing about Smoke Owner"), "the guest prompt still closes the owner's world");
-      check(!prompt.includes(OWNER_PHONE), "the guest prompt carries no owner contact details");
-      check(prompt.includes("vault.write"), "the guest's capabilities include the vault");
-      check(!prompt.includes("memory.write"), "the guest's capabilities exclude the owner's notebook");
+      const prompt = person.runtime.conversation("imessage:conv_alex", alexPrincipal).agent.state.systemPrompt;
+      check(prompt.includes("a personal agent built on Open Instinct, hosted by"), "the prompt presents a personal agent, not a sandbox");
+      check(prompt.includes("They are your person, not a stranger to turn away"), "the prompt treats the sender as this agent's own person");
+      check(prompt.includes("notebook (kept for them on this host)"), "the prompt carries that person's own notebook");
+      check(prompt.includes("Alex likes the demo."), "the prompt shows the sender their own note");
+      check(!prompt.includes("bees"), "and nothing of anyone else's");
+      check(!prompt.includes("Do not run tasks for them"), "the prompt does not turn the sender away");
+      check(prompt.includes("Share nothing about Smoke Owner"), "the prompt still closes the owner's world");
+      check(!prompt.includes(OWNER_PHONE), "the prompt carries no owner contact details");
+      check(prompt.includes("vault.write"), "their capabilities include the vault");
+      check(prompt.includes("memory.write"), "and their own notebook");
+      check(!ownerMemory.includes("Pat keeps bees"), "the owner's notebook still holds nothing of theirs");
     } finally {
-      await new Promise<void>((resolve) => guestServer.close(() => resolve()));
-      await closeInkboxInbox(guest);
-      await guest.close();
-      rmSync(guestDir, { recursive: true, force: true });
+      await new Promise<void>((resolve) => personServer.close(() => resolve()));
+      await closeInkboxInbox(person);
+      await person.close();
+      rmSync(personDir, { recursive: true, force: true });
     }
 
     console.log("status");

@@ -55,6 +55,12 @@ export interface RuntimeDeps {
   scheduler: Scheduler;
   contacts: ContactStore;
   memory: MemoryStore;
+  /**
+   * The notebook of whoever is talking, when it is not the owner's. A public agent gives
+   * each person their own file rather than a shared one; on a private agent this is absent
+   * and every caller resolves to the owner's store.
+   */
+  memoryFor?: (principal: Principal) => MemoryStore;
   registry: ToolRegistry;
   model: Model<any>;
   outbox: Outbox;
@@ -910,13 +916,25 @@ export class AgentRuntime {
   }
 
   /**
-   * Memory is the owner's private notebook. The owner in their own thread gets the whole
-   * digest. Anyone whose tier may know the owner's preferences gets the Preferences section
+   * Memory is a notebook per person. The owner in their own thread gets theirs in full.
+   * On a public agent anyone else gets their own notebook and nothing of the owner's;
+   * on a private agent, a tier that may know the owner's preferences gets that section
    * only, and nobody else gets anything.
    */
   private memoryDigestFor(principal: Principal): string {
     const { memory, policy } = this.deps;
     if (principal.kind === "owner" && principal.tier === "owner") return memory.digest(4000, this.now());
+    // The owner always reads their own notebook, even in a thread that caps their tier.
+    const own = principal.kind === "owner" ? undefined : this.deps.memoryFor?.(principal);
+    if (own && own !== memory) {
+      const digest = own.digest(2000, this.now());
+      if (!digest) return "";
+      return (
+        `## ${principal.displayName}'s notebook (kept for them on this host)\n` +
+        "These are this person's own notes. They are not yours and not your host's: never mix them with another person's notes, " +
+        `and never repeat anything from ${this.deps.config.owner.name}'s memory here.\n${digest}`
+      );
+    }
     const permission = policy.permissionFor(principal.tier, "owner.profile.preferences");
     if (permission !== "yes" && permission !== "partial") return "";
     const prefs = memory.preferencesDigest(permission === "yes" ? 1500 : 600);
