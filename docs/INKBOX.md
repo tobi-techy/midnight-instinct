@@ -56,7 +56,7 @@ The agent is one identity. You, the owner, are not an Inkbox identity. You are a
 
 | Key | Scope | Who holds it | Can do |
 |---|---|---|---|
-| Admin key | the whole org | you, in your shell, as `INKBOX_ADMIN_API_KEY` | create identities, mint identity keys, create signing keys, subscribe webhooks, write contact rules, create invitations |
+| Admin key | the whole org | you, in your shell, as `INKBOX_ADMIN_API_KEY` | create identities, mint identity keys, create invitations. Not needed to run an identity that already exists: its own key rotates its signing key and manages its own subscriptions |
 | Identity-scoped key | one identity | the agent process, as `INKBOX_API_KEY` | send and receive on that identity only. Gets 403 on contact rules, domains and billing |
 
 The split matters. The admin key can read every identity in your org. The agent runs with the narrow key, so a bug or a prompt injection in the agent cannot reach anything but its own line. `instinct init` mints the identity key for you and stores it in `<dataDir>/secrets/inkbox.json`. The admin key is never written to disk by Open Instinct.
@@ -149,7 +149,7 @@ Who subscribes, and to what URL:
 
 | Shape | Subscribed by | URL |
 |---|---|---|
-| Self-host | `instinct dev --tunnel`, or the server with `INSTINCT_TUNNEL=1`, when `INKBOX_ADMIN_API_KEY` is set | `https://<handle>.inkboxwire.com/webhooks/inkbox` |
+| Self-host | `instinct dev --tunnel`, or the server with `INSTINCT_TUNNEL=1`, with the identity's own key; `INKBOX_ADMIN_API_KEY` only automates the subscription | `https://<handle>.inkboxwire.com/webhooks/inkbox` |
 | Gateway (many users) | the gateway at signup | `<GATEWAY_PUBLIC_URL>/webhooks/inkbox/<userId>` |
 | By hand | you, in the console or with the API | whatever public URL reaches the server |
 
@@ -331,7 +331,7 @@ POST https://inkbox.ai/api/v1/agent-signup/
 
 The response carries `api_key`, `email_address`, `agent_handle` and `claim_status`. The human gets a six-digit code by email and the agent posts it to `POST /api/v1/agent-signup/verify`. After that the identity is live and the key works like any identity-scoped key.
 
-Open Instinct does not automate this path yet. `instinct init` expects `INKBOX_ADMIN_API_KEY`. To use self-signup today:
+Open Instinct does not automate this path yet. `instinct init` expects `INKBOX_ADMIN_API_KEY` to create an identity; for one that already exists, its own key is enough. To use self-signup today:
 
 1. Call the two routes above with curl and keep the `api_key`.
 2. Run `instinct init --name <you> --phone +1... --handle <the handle Inkbox returned> --skip-inkbox`.
@@ -346,7 +346,7 @@ Each of these is read by the server, the CLI or the gateway. Nothing else in the
 
 | Variable | Set by | Read by | Meaning |
 |---|---|---|---|
-| `INKBOX_ADMIN_API_KEY` | you | `instinct init`, `connect`, `invite`, `dev --tunnel`, the server, the gateway | org-wide key. Provisions identities, mints keys, creates signing keys, subscribes webhooks, writes contact rules, creates invitations |
+| `INKBOX_ADMIN_API_KEY` | you | `instinct init`, `connect`, `invite` | org-wide key. Provisions identities, mints keys, creates invitations. Optional once an identity exists: its own key subscribes its webhooks and rotates its signing key |
 | `INKBOX_API_KEY` | `init` writes it to `secrets/inkbox.json`; `dev` and `deploy` load it | the server, `dev --tunnel` | the identity-scoped key the agent sends with |
 | `INKBOX_AGENT_HANDLE` | same | the server, `dev --tunnel` | the agent's handle. Needed with `INKBOX_API_KEY` for the outbox to become Inkbox |
 | `INKBOX_IDENTITY_ID` | same | the server | the identity's UUID. Saves one lookup when subscribing webhooks |

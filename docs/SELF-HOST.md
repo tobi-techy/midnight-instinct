@@ -29,7 +29,7 @@ Analogy: the agent is a person who works from home. Inkbox is their phone line. 
 |---|---|---|
 | Node 22.19 or newer and pnpm | runs the agent and the CLI | yes |
 | A model key (`ANTHROPIC_API_KEY`, or `OPENAI_API_KEY` with `OPENAI_BASE_URL`) | the model behind the agent | yes |
-| An Inkbox admin key (`INKBOX_ADMIN_API_KEY`) from the Inkbox console | gives the agent an iMessage line, email and A2A endpoint | for iMessage |
+| An Inkbox key from the Inkbox console: an org admin key (`INKBOX_ADMIN_API_KEY`) to provision a new identity, or an identity-scoped key (`INKBOX_API_KEY`) for one that already exists | gives the agent an iMessage line, email and A2A endpoint | for iMessage |
 | A Maritime key (`MARITIME_API_KEY`) with the `computers` scope | a hosted Linux desktop the agent can drive | for computer use |
 | Docker | only for the Compose path | no |
 
@@ -59,7 +59,7 @@ The rest of this guide writes `instinct ...` and assumes one of those two.
 
 ## Step 1: `instinct init`
 
-`init` writes `config.json` into the data directory. With `INKBOX_ADMIN_API_KEY` in the environment it also creates the agent's Inkbox identity.
+`init` writes `config.json` into the data directory. With `INKBOX_ADMIN_API_KEY` in the environment it also creates the agent's Inkbox identity; with an identity-scoped `INKBOX_API_KEY` and `--handle` it adopts an identity that already exists, which is all a deployed agent needs.
 
 ```bash
 export ANTHROPIC_API_KEY=sk-ant-...
@@ -140,8 +140,8 @@ Step by step:
 1. `instinct dev --tunnel` sets `INSTINCT_TUNNEL=1`.
 2. The server starts a second listener on loopback that answers only `GET /health` and `POST /webhooks/inkbox`. Everything else on that listener is 404.
 3. The CLI opens an Inkbox tunnel with the identity key and the handle. Every identity owns the host `https://<handle>.inkboxwire.com`. The tunnel is outbound HTTP/2, so it works from inside any network that allows HTTPS out.
-4. With `INKBOX_ADMIN_API_KEY` set, the CLI subscribes the identity's webhooks to `https://<handle>.inkboxwire.com/webhooks/inkbox`. An existing subscription for the same URL is reused. The signing key is stored in `<dataDir>/secrets/webhook.json`.
-5. Without the admin key, the CLI prints the URL and you create the subscription yourself in the Inkbox console or with the API. See [INKBOX.md](INKBOX.md#webhooks-and-signing-keys).
+4. The CLI subscribes the identity's webhooks to `https://<handle>.inkboxwire.com/webhooks/inkbox` and stores the signing key in `<dataDir>/secrets/webhook.json`. An existing subscription for the same URL is reused.
+5. `INKBOX_ADMIN_API_KEY` is only what automates step 4. An identity-scoped key can do the same work for its own identity, so an admin key is not required to run the tunnel: create the subscription with `inkbox webhook subscription create --agent-identity-id <id> --url <tunnel URL>`, and rotate the identity's signing key with `inkbox identity signing-key rotate <handle>` if you need a fresh one, then pass it as `INKBOX_SIGNING_KEY`. See [INKBOX.md](INKBOX.md#webhooks-and-signing-keys).
 
 Two safety points:
 
@@ -192,7 +192,7 @@ Notes for this path:
 
 - The container runs as the unprivileged `instinct` user. The entrypoint only uses root to make `/data` writable, then drops privileges.
 - Without Inkbox keys the agent still runs. Replies go to the container log (`docker compose -f deploy/docker-compose.yml logs -f agent`).
-- To receive iMessage in a container, set `INSTINCT_TUNNEL=1` in `deploy/.env` along with the `INKBOX_*` values. The server opens the tunnel itself and, with `INKBOX_ADMIN_API_KEY`, subscribes the webhook.
+- To receive iMessage in a container, set `INSTINCT_TUNNEL=1` in `deploy/.env` along with the `INKBOX_*` values. The server opens the tunnel itself and verifies deliveries with `INKBOX_SIGNING_KEY`. It subscribes the webhook for you only when `INKBOX_ADMIN_API_KEY` is set; otherwise create the subscription with the identity's own key. See [INKBOX.md](INKBOX.md#webhooks-and-signing-keys).
 - Set `INSTINCT_CHAT_TOKEN` in `deploy/.env` if anything beyond this machine should reach `/chat`. See [Keeping the owner surface private](#keeping-the-owner-surface-private).
 - The `gateway` service in the same file is for the multi-user shape. It needs `--profile gateway` and is not part of a single-person self-host. See the [gateway README](../packages/gateway/README.md).
 
@@ -332,7 +332,7 @@ Every variable below is read by the server or the CLI. `deploy/.env.example` lis
 | `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `OPENAI_BASE_URL` | server, CLI | model access |
 | `INSTINCT_OWNER_NAME`, `INSTINCT_OWNER_PHONE`, `INSTINCT_OWNER_EMAIL`, `INSTINCT_OWNER_TIMEZONE`, `INSTINCT_AGENT_NAME` | server | seed `config.json` on first boot. `init` flags do the same job |
 | `INKBOX_API_KEY`, `INKBOX_AGENT_HANDLE`, `INKBOX_IDENTITY_ID`, `INKBOX_SIGNING_KEY` | server, CLI | the identity-scoped Inkbox credentials. `init` saves them in `secrets/inkbox.json`; `dev` loads them |
-| `INKBOX_ADMIN_API_KEY` | CLI, server | org-wide key. Provisions the identity, subscribes webhooks, creates invitations |
+| `INKBOX_ADMIN_API_KEY` | CLI, server | org-wide key. Provisions identities, mints keys, creates invitations. Optional once an identity exists, whose own key can subscribe its webhooks and rotate its signing key |
 | `INKBOX_BASE_URL` | CLI, server | only for a self-hosted Inkbox |
 | `INSTINCT_TUNNEL` | server, CLI | `1` opens the Inkbox tunnel. `dev --tunnel` sets it |
 | `INSTINCT_CHAT_TOKEN` | server, CLI | bearer token for the owner surface |
@@ -354,8 +354,8 @@ Every variable below is read by the server or the CLI. `deploy/.env.example` lis
 | Symptom | Likely cause | Fix |
 |---|---|---|
 | `no tunnel: iMessage webhooks need --tunnel or the gateway` | `dev` started without the flag | run `instinct dev --tunnel` |
-| `INKBOX_API_KEY and INKBOX_AGENT_HANDLE are required` | no `secrets/inkbox.json` | run `instinct init` with `INKBOX_ADMIN_API_KEY` set |
-| `webhook: subscribe Inkbox events to https://...` printed in grey | no admin key, so no auto-subscribe | set `INKBOX_ADMIN_API_KEY`, or subscribe by hand to the printed URL |
+| `INKBOX_API_KEY and INKBOX_AGENT_HANDLE are required` | no `secrets/inkbox.json` | run `instinct init` with `INKBOX_ADMIN_API_KEY` set, or with `INKBOX_API_KEY` plus `--handle` for an identity that already exists |
+| `webhook: subscribe Inkbox events to https://...` printed in grey | no admin key, so no auto-subscribe | subscribe by hand to the printed URL with the identity's own key, or set `INKBOX_ADMIN_API_KEY` to automate it |
 | texts from your phone get no answer | your number is not the owner's | check `--phone` in `init` matches the iPhone you text from, in E.164 form |
 | webhook returns 401 | signing key mismatch | delete `secrets/webhook.json` and restart with the admin key, or set `INKBOX_SIGNING_KEY` to the current key |
 | webhook returns 503 | no signing key configured at all | same as above |
