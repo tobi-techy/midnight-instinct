@@ -99,8 +99,8 @@ key is required; that is a documentation bug we will fix.
 
 ## 8. Quality
 
-- **976 tests pass across 10 packages, 0 failures** (verified 2026-10-18): core
-  226, apps 147, inkbox 145, server 101, cli 84, gateway 67, payments 66, network
+- **980 tests pass across 10 packages, 0 failures** (verified 2026-10-18): core
+  226, apps 147, inkbox 149, server 101, cli 84, gateway 67, payments 66, network
   65, computer 43, midnight 32. Plus the 13 Compact-runtime simulator tests and
   an indexer-backed end-to-end check in `deploy/midnight-devnet`.
 - **CI is green on `main`**: `ci`, `secret-scan` and `build-images`. Both
@@ -124,6 +124,16 @@ key is required; that is a documentation bug we will fix.
   `instinct dev --tunnel`, or a stray probe) takes the tunnel over; the superseded
   client stops reconnecting by design and needs a restart. Do not run a second one
   while the deployed agent is live.
+- **The tunnel hop does not go through `fetch`.** With the runtime driven, every
+  delivery still died as a `502 upstream-unreachable`. The SDK's `forwardTo` path
+  proxies the request with `fetch`, and undici rejects the `content-length` header
+  Inkbox forwards alongside a materialized body (`UND_ERR_INVALID_ARG: invalid
+  content-length header`), so the webhook route never ran. The server and the CLI
+  now pass an in-process Fetch handler that drives the loopback hop with
+  `node:http`, forwarding the body byte-for-byte (the webhook signature is
+  computed over those exact bytes) and re-deriving the framing headers on both
+  sides. Four tests, including the regression case with an inbound
+  `content-length`.
 
 ## How judges test the agent
 

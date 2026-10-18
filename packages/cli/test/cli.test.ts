@@ -514,7 +514,8 @@ describe("dev", () => {
     });
     expect(r.code, r.err).toBe(0);
     expect(seen.bootEnv?.INSTINCT_TUNNEL).toBe("1");
-    expect(tunnels[0]).toMatchObject({ apiKey: "ik", handle: "maria-instinct", forwardTo: "http://127.0.0.1:9124" });
+    expect(tunnels[0]).toMatchObject({ apiKey: "ik", handle: "maria-instinct" });
+    expect(typeof (tunnels[0] as { handler?: unknown }).handler).toBe("function");
     expect(seen.webhook).toMatchObject({ adminApiKey: "ak", handle: "maria-instinct", identityId: "idn_1", url: "https://maria-instinct.inkboxwire.com/webhooks/inkbox" });
     expect(r.out).toContain("sub_1");
     // Without a signing key in env, the provider falls back to the server's webhook file.

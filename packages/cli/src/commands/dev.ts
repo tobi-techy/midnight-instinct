@@ -5,7 +5,7 @@
  * the server's own main.ts so iMessage reaches a laptop.
  */
 import { loadConfig } from "@open-instinct/core";
-import { driveTunnel } from "@open-instinct/inkbox";
+import { driveTunnel, loopbackForwardHandler, type TunnelFetchHandler } from "@open-instinct/inkbox";
 import { parse, str, flag, type OptionSpec } from "../args.js";
 import type { CliContext } from "../context.js";
 import { readSecrets, applySecretsToEnv } from "../secrets.js";
@@ -55,7 +55,7 @@ export interface TunnelHandle {
   close(): Promise<void>;
 }
 
-export type TunnelConnector = (opts: { apiKey: string; handle: string; baseUrl?: string; forwardTo: string; log: (m: string) => void }) => Promise<TunnelHandle>;
+export type TunnelConnector = (opts: { apiKey: string; handle: string; baseUrl?: string; forwardTo?: string; handler?: TunnelFetchHandler; log: (m: string) => void }) => Promise<TunnelHandle>;
 
 async function defaultImportServer(): Promise<ServerModule> {
   const mod = (await import("@open-instinct/server")) as unknown as Partial<ServerModule>;
@@ -65,12 +65,15 @@ async function defaultImportServer(): Promise<ServerModule> {
   return mod as ServerModule;
 }
 
-const defaultConnectTunnel: TunnelConnector = async ({ apiKey, handle, baseUrl, forwardTo, log }) => {
+const defaultConnectTunnel: TunnelConnector = async ({ apiKey, handle, baseUrl, forwardTo, handler, log }) => {
   const { Inkbox } = await import("@inkbox/sdk");
   const { connect } = await import("@inkbox/sdk/tunnels/connect");
   const listener = await connect(new Inkbox({ apiKey, ...(baseUrl ? { baseUrl } : {}) }), {
     name: handle,
-    forwardTo,
+    // The handler is preferred: `forwardTo` proxies through `fetch`, and undici
+    // rejects the `content-length` header Inkbox forwards with a materialized
+    // body (`UND_ERR_INVALID_ARG`), failing every webhook with a 502.
+    ...(handler ? { handler } : { forwardTo }),
     installSignalHandlers: false,
     onStatus: (status: unknown) => log(`tunnel ${String(status)}`),
   });
@@ -178,7 +181,7 @@ async function startTunnel(ctx: CliContext, server: ServerModule, app: BootLike,
   const handle = env.INKBOX_AGENT_HANDLE;
   if (!apiKey || !handle) throw new Error("INKBOX_API_KEY and INKBOX_AGENT_HANDLE are required (run `instinct init` with INKBOX_ADMIN_API_KEY)");
   const connectTunnel = ctx.io.connectTunnel ?? defaultConnectTunnel;
-  const tunnel = await connectTunnel({ apiKey, handle, baseUrl: env.INKBOX_BASE_URL, forwardTo: `http://127.0.0.1:${port}`, log });
+  const tunnel = await connectTunnel({ apiKey, handle, baseUrl: env.INKBOX_BASE_URL, handler: loopbackForwardHandler(port), log });
   const webhookUrl = `${tunnel.publicUrl.replace(/\/+$/, "")}/webhooks/inkbox`;
   ctx.print(`  tunnel: ${tunnel.publicUrl}`);
 

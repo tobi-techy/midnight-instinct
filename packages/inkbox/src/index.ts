@@ -15,5 +15,5 @@ export { InkboxHttpError, createRest, parseRetryAfter, isHttpStatus, INKBOX_BASE
 export type { RestClient, RestOptions } from "./http.js";
 export { DurableInbox } from "./inbox.js";
 export type { DurableInboxOptions } from "./inbox.js";
-export { driveTunnel } from "./tunnel.js";
-export type { DrivenTunnel } from "./tunnel.js";
+export { driveTunnel, loopbackForwardHandler } from "./tunnel.js";
+export type { DrivenTunnel, TunnelFetchHandler, TunnelRequestContext } from "./tunnel.js";

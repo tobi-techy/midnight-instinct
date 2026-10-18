@@ -11,7 +11,7 @@
  */
 import type http from "node:http";
 import { Inkbox } from "@inkbox/sdk";
-import { driveTunnel } from "@open-instinct/inkbox";
+import { driveTunnel, loopbackForwardHandler } from "@open-instinct/inkbox";
 import { bindHostFor } from "./bind.js";
 import { boot } from "./boot.js";
 import { closeInkboxInbox, createHttpServer, listenTunnelServer } from "./http.js";
@@ -78,7 +78,12 @@ async function startTunnel(port: number, state: Awaited<ReturnType<typeof boot>>
   const inkbox = new Inkbox({ apiKey: env.INKBOX_API_KEY, ...(env.INKBOX_BASE_URL ? { baseUrl: env.INKBOX_BASE_URL } : {}) });
   const listener = await connect(inkbox, {
     name: handle,
-    forwardTo: `http://127.0.0.1:${port}`,
+    // Not `forwardTo`: that path proxies through `fetch`, and undici rejects the
+    // `content-length` header Inkbox forwards with a materialized body
+    // (`UND_ERR_INVALID_ARG`), so every delivery would die as a 502 before the
+    // webhook route ever runs. The handler drives the loopback hop with
+    // `node:http` instead.
+    handler: loopbackForwardHandler(port),
     installSignalHandlers: false,
     onStatus: (status) => log(`tunnel ${status}`),
   });
