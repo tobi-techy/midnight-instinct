@@ -99,8 +99,8 @@ key is required; that is a documentation bug we will fix.
 
 ## 8. Quality
 
-- **972 tests pass across 10 packages, 0 failures** (verified 2026-10-18): core
-  226, apps 147, inkbox 141, server 101, cli 84, gateway 67, payments 66, network
+- **976 tests pass across 10 packages, 0 failures** (verified 2026-10-18): core
+  226, apps 147, inkbox 145, server 101, cli 84, gateway 67, payments 66, network
   65, computer 43, midnight 32. Plus the 13 Compact-runtime simulator tests and
   an indexer-backed end-to-end check in `deploy/midnight-devnet`.
 - **CI is green on `main`**: `ci`, `secret-scan` and `build-images`. Both
@@ -110,6 +110,20 @@ key is required; that is a documentation bug we will fix.
 - **The gateway can adopt an existing identity** (`GATEWAY_ADOPT`,
   `GATEWAY_AGENT_ENV`), which is what let a deployed VM attach to the @sealai
   identity instead of minting a new one. Ten new tests.
+- **The iMessage tunnel is driven, not just built.** `connect()` only builds an
+  Inkbox tunnel listener; `serveForever()` is what dials the data plane, and
+  nothing called it. The deployed agent therefore advertised its public tunnel
+  URL, Inkbox logged every delivery against it, and not one of them arrived — the
+  tunnel record read `currentlyConnected=false` for its whole life while the
+  client happily printed a URL. `driveTunnel()` in `@open-instinct/inkbox` drives
+  the listener and reports a fatal runtime error instead of rejecting the host;
+  the server entrypoint and `instinct dev --tunnel` both use it. Four tests. With
+  it, a replay of a real delivery answers `204`, the signature verifies against
+  the identity's signing key, and the agent replies.
+- **Only one live tunnel client per identity.** A second client (a laptop running
+  `instinct dev --tunnel`, or a stray probe) takes the tunnel over; the superseded
+  client stops reconnecting by design and needs a restart. Do not run a second one
+  while the deployed agent is live.
 
 ## How judges test the agent
 

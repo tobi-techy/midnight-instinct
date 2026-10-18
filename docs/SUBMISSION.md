@@ -23,6 +23,7 @@ Everything the buildathon asked for is new in this fork:
 | Allowance gate: `/allowance/check` plus a runtime check before every gated action (`purchase`, `travel.book`, `computer.use`, `apps.use`, `network.ask`) that fails closed when the ledger cannot be reached | `packages/core/src/runtime.ts`, `packages/core/src/policy.ts`, `packages/server/` |
 | Preprod sync fix: the SDK pinned `shouldRetry: () => false`, so one dropped indexer socket was permanently fatal, and because wallet state is written only after a completed sync, every restart began again at genesis. An idempotent patch restores reconnect with a widened predicate, and progress, stall and checkpoint logging make a 17-hour first sync resumable | `deploy/midnight-devnet/scripts/patch-wallet-sdk.mjs`, `src/diagnostics.ts`, `src/progress.ts` |
 | The LLM API gateway as a first-class model provider | `packages/core/src/model.ts`, `packages/server/src/boot.ts` |
+| The Inkbox tunnel fix: `connect()` alone never dials the data plane, so a deployed agent advertised its tunnel URL and received nothing | `packages/inkbox/src/tunnel.ts`, `packages/server/src/main.ts`, `packages/cli/src/commands/dev.ts` |
 
 Commits on `midnight/main`: `d727522` (vault), `99d2172` (verifier and gate),
 `8d6a61f` (sync fix), `88ceffe` (model gateway).
@@ -141,7 +142,7 @@ file the agent could talk its way around.
 
 - Contracts compile with the Midnight Compact toolchain 0.31.1 (language 0.23):
   `pnpm run contracts:check`.
-- **972 tests across 10 packages**: core 226, apps 147, inkbox 141, server 101,
+- **976 tests across 10 packages**: core 226, apps 147, inkbox 145, server 101,
   cli 84, gateway 67, payments 66, network 65, computer 43, midnight 32. Plus
   **13 Compact-runtime simulator tests** (`deploy/midnight-devnet`, 2 files) and
   an indexer-backed end-to-end check.
