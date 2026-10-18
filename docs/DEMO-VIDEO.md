@@ -19,7 +19,9 @@ export MIDNIGHT_CONTRACT_ADDRESS=6e9d608a997d5642564cbaea2b0a93a45fae0b806ee5fb6
 
 Have your phone mirrored or filmed alongside, with the Seal iMessage thread open. Have the
 agent's own verifier open in a browser tab too (`https://sealai.inkboxwire.com/verify`); it
-works while the adapter is down, because that agent verifies its own proofs.
+works while the adapter is down, because that agent verifies its own proofs, and the front
+door already prefills the newest one (at the time of writing,
+`https://sealai.inkboxwire.com/verify/6910e607567598e110eb582693b7e757e856375db84bd3479bcc7b4fd643ac3c`).
 
 ## The shots
 
