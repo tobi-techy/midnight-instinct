@@ -62,8 +62,17 @@ attached, reachable over iMessage and email. Text `connect @sealai` to
 
 1. Ask it to remember something.
 2. Ask it to prove a fact about that memory. The text stays on the host; the reply
-   carries an attestation id.
-3. Check that id yourself, with no wallet: `instinct midnight verify <attestationId>`.
+   carries an attestation id and a link.
+3. Open that link (`https://sealai.inkboxwire.com/verify/<attestationId>`), or paste
+   the id at [`/verify`](https://sealai.inkboxwire.com/verify). No wallet, no seed,
+   no cooperation from the agent: the page reports whether the attestation is
+   recorded, which single category it disclosed, and that it is single-use. The same
+   id also verifies from the CLI: `instinct midnight verify <attestationId>`.
+
+The live agent anchors in `mock` mode, and every page it serves says so: the
+commitment and the nullifier are real, no transaction was submitted. The on-chain
+evidence is the recorded Preprod run below, with the contracts, the attestation and
+the verifier transcript.
 
 The VM sleeps when idle, so a message can land while it is asleep. Every delivery
 is logged and replayable (`inkbox webhook delivery list`, then

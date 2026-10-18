@@ -27,8 +27,8 @@ filled after the deploy or the recording are marked **FILL IN**.
 | GitHub repository | https://github.com/tobi-techy/midnight-instinct |
 | Submission brief | https://github.com/tobi-techy/midnight-instinct/blob/main/docs/SUBMISSION.md |
 | Live demo (the agent's verifier) | https://sealai.inkboxwire.com/verify |
-| Pre-filled proof link | **FILL IN** after the deploy: `https://sealai.inkboxwire.com/verify/<attestation id the agent replies with>` |
-| Landing page | https://github.com/tobi-techy/midnight-instinct (README). **FILL IN** if a hosted page is standing by. |
+| Pre-filled proof link (issued by the live agent) | https://sealai.inkboxwire.com/verify/6910e607567598e110eb582693b7e757e856375db84bd3479bcc7b4fd643ac3c |
+| Landing page | **FILL IN** if you have a hosted page; the README above is the fallback. |
 | Video | **FILL IN** after recording (target 2:30, shot list: `docs/DEMO-VIDEO.md`) |
 | Contracts on Preprod | `memory-vault` `6e9d608a997d5642564cbaea2b0a93a45fae0b806ee5fb68e8e0b008c2f19f7f`; `allowance-registry` `fd4bfac0d1ae522793050401ee9021bc7dfe27767745f5a3e954d15895d4afb1` |
 | Recorded Preprod proof | attestation `c91ebd08d0010b1a1aac921345ba5fe69354b87e910d346dd753573e7d352145`, verified read-only by the adapter |

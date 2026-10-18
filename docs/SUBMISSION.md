@@ -149,6 +149,13 @@ file the agent could talk its way around.
   an indexer-backed end-to-end check.
 - The agent's own client drives the chain through the REST adapter:
   `packages/midnight/scripts/adapter-roundtrip.mjs`.
+- **A verifier link a judge can click.** The deployed agent serves
+  `https://sealai.inkboxwire.com/verify`: a read-only page (and the same JSON for
+  anything that is not a browser) that answers whether an attestation is recorded,
+  which single category it disclosed and whether it is single-use. The front door
+  prefills the newest proof the agent issued, and every proof reply carries its own
+  link. The live agent anchors in `mock` mode and the page says so on every check;
+  the chain evidence is the recorded Preprod run above.
 - A runnable web console is served by the adapter at `http://127.0.0.1:6400`
   after `npm run adapter` inside `deploy/midnight-devnet`.
 - Committed local devnet artifacts (node + indexer + proof server, 2026-10-14)

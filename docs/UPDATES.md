@@ -228,7 +228,8 @@ itself:
   the tunnel listener, which the smoke test asserts.
 - `GET /verify` is the front door: a form prefilled with the newest attestation this agent
   issued, so a reader always has a proof to check. `GET /verify?id=<64 hex>` hands off to the
-  proof page, which is how a reply, a slide or a bookmark carries a pre-filled link.
+  proof page, which is how a reply, a slide or a bookmark carries a pre-filled link. It is
+  live at `https://sealai.inkboxwire.com/verify`.
 - `MIDNIGHT_VERIFY_URL` (the agent's tunnel host) puts the link in the proof reply next to
   the attestation id, and the Midnight guidance tells the model to hand over both. Without
   it, replies carry the bare id exactly as before.
@@ -249,7 +250,15 @@ Worth stating without decoration, because a judge will ask:
 - **The deployed agent anchors in `mock` mode.** Its commitments are real sha256
   commitments, its nullifiers are real single-use nullifiers, and its vault scope per sender
   is real; the only thing missing is a submitted transaction. The verifier page says so in
-  as many words on every check, so nothing overstates what a link proves.
+  as many words on every check, so nothing overstates what a link proves. Live example from
+  the deployed agent: `https://sealai.inkboxwire.com/verify/6910e607567598e110eb582693b7e757e856375db84bd3479bcc7b4fd643ac3c`
+  reports `valid: true`, `disclosed: health`, `singleUse: true`, `mode: mock`.
+- **The deployed agent is a public demo agent.** It is named Seal, runs
+  `INSTINCT_AGENT_PUBLIC=1`, and its `PERSONA.md` is the demo voice in
+  `deploy/guest-agent/PERSONA.md`, so an unknown number is a guest with the vault rather
+  than a stranger with a brush-off. Both `INSTINCT_AGENT_NAME` and `INSTINCT_AGENT_PUBLIC`
+  now override an existing `config.json` the way `INSTINCT_MODEL` already did — without
+  that, a hosted agent could not be renamed or opened by the platform running it.
 - **The chain evidence is the Preprod deployment of 2026-10-16.** Both contracts are live
   (`memory-vault` `6e9d608a…`, `allowance-registry` `fd4bfac0…`), Preprod holds the
   commitment `1443be15…` to `"I take medication X daily"`, one health attestation

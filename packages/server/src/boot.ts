@@ -402,7 +402,7 @@ export async function boot(env: NodeJS.ProcessEnv, opts: BootOptions = {}): Prom
     sync.start();
   }
 
-  log(`agent "${config.agent.name}" ready: model ${modelSpec}, ${registry.all().length} tools, data ${state.root}`);
+  log(`agent "${config.agent.name}" ready: model ${modelSpec}, ${registry.all().length} tools, data ${state.root}${config.agent.public ? " (public demo agent: unknown senders are guests)" : ""}`);
 
   return {
     runtime,
