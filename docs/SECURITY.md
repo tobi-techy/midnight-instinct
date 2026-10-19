@@ -48,7 +48,7 @@ described in the next section.
 | Other agent | Ask for calendar titles, memory or a purchase | Policy guard; free/busy only for friends, nothing for strangers |
 | Other agent | Claim to be the owner or a trusted agent | Inkbox contact rules plus our contact lookup by handle; `owner` is a reserved handle |
 | Stranger | Flood the agent with messages | Stranger limits: 3 new conversations a day, 10 messages each, 3 relayed messages a day |
-| Stranger | Read anything about the owner | Strangers get no memory, no profile, no tools except `notify_owner` |
+| Stranger | Read anything about the owner | Strangers get no owner memory, no profile, no tools except `notify_owner`. On a public agent they get a notebook of their own under `memory/people/<hash>/`, never the owner's |
 | Web page | Prompt injection in page text or a screenshot | Untrusted wrapping; policy guard runs on every tool call |
 | Web page | Point `web_fetch` at the agent's own services | SSRF guard |
 | Web page | Make the agent change a payment amount or merchant | Owner sees the exact amount and merchant in Link before any card exists |

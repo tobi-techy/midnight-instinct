@@ -127,6 +127,10 @@ Memory is the owner's notebook. Everyone else sees at most the `## Preferences` 
 share only general preferences ("some", "little"), contacts and strangers get nothing. An unstructured
 `MEMORY.md` with no such heading shares nothing.
 
+On a public agent the notebook is per person instead (see *Public agents* above): a sender gets a
+notebook of their own and never the owner's, and that section of the owner's `MEMORY.md` is still
+denied to every tier below the owner.
+
 ### Payments
 
 The `payment_*` tools from `@open-instinct/payments` sit under the same table.
