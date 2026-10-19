@@ -322,7 +322,9 @@ says, so memory is now one notebook per person.
 What this does not change: the owner's agent is still private by default (no `public`, no
 notebooks for anyone else), and a notebook is a file on the same host, not an encrypted
 store. A hosted public agent should be its own machine and its own identity — which is
-exactly how the deployed one runs.
+exactly how the deployed one runs: `e8a73c0` is deployed to the live agent and CI is green
+on it, so the verifier at `https://sealai.inkboxwire.com/verify` and the notebook path below
+are the same build.
 
 ## How judges test the agent
 
