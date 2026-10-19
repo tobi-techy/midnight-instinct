@@ -47,6 +47,20 @@ filled after the deploy or the recording are marked **FILL IN**.
 > ceiling on chain, the circuit refuses anything over it, and the agent fails closed when the
 > ledger cannot be reached.
 
+## Which parts require privacy (the question judges asked)
+
+Four things are private, and everything else is public on purpose so a stranger can check it:
+
+- **The memory text** — a sentence about a person, kept on the host in their own notebook.
+- **The preimage `sha256(text)`** — memories are guessable, so a bare hash would be brute-forceable; the circuit works on `persistentCommit(preimage, salt)` instead.
+- **The salt and the owner secret** — device only. The salt is what makes the commitment hiding, and the owner secret is what binds allowances.
+- **The category, until disclosed** — committed with a hiding commitment and revealed only in a proof the person chose to make.
+
+Public by design: the commitment, the category binding, the owner binding, the single-use
+nullifier, and the allowance limits and totals. That is exactly what makes a proof checkable
+with no wallet and no cooperation from us, and none of it reverses back into the text. The
+full inventory, including what is deliberately not protected, is in `docs/PRIVACY-MODEL.md`.
+
 ## Judge steps (three steps, copy this verbatim)
 
 1. **Text the agent.** Send `connect @sealai` to **+16504849720** on iMessage (or email

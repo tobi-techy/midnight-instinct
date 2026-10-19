@@ -59,6 +59,28 @@ a hiding commitment to each memory's category (the plain code appears only when
 the owner attests it), and nullifiers. The full inventory is in
 [PRIVACY-MODEL.md](PRIVACY-MODEL.md).
 
+## Which parts require privacy, and why
+
+Asked of a peer submission, and a fair question for ours, so it is answered field by field.
+The rule: anything that would let a reader reconstruct a person's life is private, and
+everything the protocol needs to be *checkable* stays public.
+
+| Field | Where it lives | Why it must be private, or why it is safely public |
+|---|---|---|
+| The memory text | **Private**, on the host: `memory/MEMORY.md`, or `memory/people/<hash>/MEMORY.md` for anyone else the agent talks to | It is the thing being protected. A memory is a sentence about a person, not an id |
+| The preimage `sha256(text)` | **Private**, circuit input only | Memories are guessable ("I take medication X daily"), so a bare hash is brute-forceable. The circuit works on `persistentCommit(preimage, salt)` instead |
+| The salt | **Private**, device only (one per vault scope) | It is what makes the commitment hiding: without it the chain could be searched. It never leaves the host, and it is bound to the scope so two scopes cannot share a commitment |
+| The category | **Private until disclosed** | Committed with a hiding commitment; the plain code appears only in a proof the owner chose to make. Disclosing it is the one bit of meaning a proof may reveal |
+| The owner secret | **Private**, device only | It binds allowances to their owner. Publishing it would let anyone spend, revoke or re-authorize |
+| Which phone or address anchored what | **Private**, hashed | The vault scope and the notebook folder are `sha256(address)`, so a state file or a directory listing never spells out who people are |
+| Commitment, category binding, owner binding, nullifier | **Public**, Midnight ledger | These are exactly what a stranger needs to check a proof with no wallet and no cooperation from us, and none of them is reversible into the text |
+| Allowance maximum, running total, individual spend | **Public by design** | An allowance is a statement like a card limit, and the spend is inferable from the public total, so we disclose it rather than pretend otherwise |
+
+The full inventory, including the threat model and what is deliberately *not* protected, is
+in [PRIVACY-MODEL.md](PRIVACY-MODEL.md). The short version: the words, the salt and the owner
+secret stay on the host; the proof, the limits and the nullifier are public, and that is the
+trade that makes the privacy checkable rather than merely asserted.
+
 ## Why this needs Midnight (and not just a database)
 
 A normal private store can hide data from *others* but not prove anything about
@@ -167,9 +189,9 @@ file the agent could talk its way around.
 | Criterion | Where it shows |
 |---|---|
 | Engineering & implementation | `contracts/` (two Compact contracts, private state, `disclose()` boundaries), `packages/midnight/`, the adapter, the verifier path; genuine private state in `witnesses.ts` |
-| Quality assurance & reliability | 1015 tests plus 13 simulator tests and an indexer-backed e2e check; the sync fix and its diagnostic layer, proven by the 17-hour Preprod run |
+| Quality assurance & reliability | `cd deploy/midnight-devnet && npm test` drives both circuits through the Compact runtime (13 tests over the compiled artifacts, no network, no wallet: bind-once, `persistentCommit` hiding, owner binding, single-use nullifiers, revocation, over-limit refusal), on top of 1015 package tests plus an indexer-backed e2e check and the 17-hour Preprod run |
 | Product & vision | a working agent, not a demo dApp; commit, prove, verify, spend is a coherent story |
-| User experience & design | the primary UX is iMessage; a web console proves the same model visually |
+| User experience & design | the primary UX is iMessage; the runnable surfaces are the hosted verifier page (`https://sealai.inkboxwire.com/verify`, and `/verify/<id>` for a specific proof) and the adapter's local console at `http://127.0.0.1:6400` after `npm run adapter` |
 | Communication | `docs/MIDNIGHT.md`, `ARCH-MIDNIGHT.md`, `PRIVACY-MODEL.md`, this brief |
 | Business development & viability | allowances map to real spend-control demand; the vault is a reusable primitive |
 

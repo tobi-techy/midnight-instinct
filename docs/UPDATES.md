@@ -374,10 +374,13 @@ Two caveats, stated plainly:
    reconnect-on-wake to the tunnel client so a resumed VM re-establishes its
    tunnel by itself, and a wake-on-delivery path so an inbound message can wake
    the VM rather than being dropped.
-2. **The adapter console.** The agent hosts its own verifier now; what is still
-   missing is the browse-all surface — a page on the proof-server adapter that
-   lists recent attestations and their ledger state, for a judge who wants to
-   look around instead of pasting one id.
+2. **A hosted frontend, not just a runnable one.** The agent hosts its own verifier
+   page, and the adapter serves a console at `http://127.0.0.1:6400` from
+   `deploy/midnight-devnet/public/index.html`, but that console is local-only. A review
+   of a peer submission flagged "no runnable frontend detected", which is the signal
+   worth acting on: publish one page that lists recent attestations and their ledger
+   state, so a judge who wants to look around can, without pasting an id or running
+   anything. The `/verify` page is the seed of it and already reads the ledger.
 3. **First beta users texting Seal.** Real people committing real memories, with
    the privacy model under load — the plaintext, the categories and the
    nullifiers as they behave outside a demo.
