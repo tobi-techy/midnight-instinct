@@ -80,8 +80,12 @@ Two things stated plainly, because judges deserve them:
   single-use nullifiers with no transaction submitted; the verify page says so on every
   check. The on-chain evidence is the recorded Preprod run (contracts above, attestation
   `c91ebd08…`), reproducible from `deploy/midnight-devnet/`.
-- The agent wakes on demand and can sleep between windows. If a message goes unanswered,
-  send one more; deliveries are logged and replayable, so nothing is lost.
+- The agent wakes on demand and can sleep between windows. Send one message to wake it
+  before you try anything: the proof page is served by the agent, so while the VM is asleep
+  the link answers nothing either (`health` and `/verify` both fail to connect, and both
+  answer `200` seconds after a wake). If a message goes unanswered, send one more;
+  deliveries are logged and replayable, so nothing is lost. The recorded Preprod transcript
+  in `docs/SUBMISSION.md` needs no running agent at all.
 
 ## Long description (if the form has a big field)
 

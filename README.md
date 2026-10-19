@@ -79,6 +79,11 @@ The VM sleeps when idle, so a message can land while it is asleep. Every deliver
 is logged and replayable (`inkbox webhook delivery list`, then
 `inkbox webhook delivery replay <delivery-id>`), so no message is lost.
 
+The same sleep applies to the proof page, which the agent itself serves: while the VM
+is asleep `https://sealai.inkboxwire.com/verify` does not connect at all (and it answers
+`200` within seconds of a wake), so wake the agent with one message before showing the
+link. The recorded Preprod transcript below is unaffected: it is a captured read.
+
 ### Straight from a fresh clone
 
 Three commands, no keys and no wallet:
