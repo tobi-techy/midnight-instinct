@@ -319,6 +319,21 @@ says, so memory is now one notebook per person.
   host. `docs/PRIVACY-MODEL.md` and `docs/PERMISSIONS.md` describe where that notebook sits
   and what it does not touch.
 
+Live evidence from the deployed agent, after a real iMessage from a number the agent had
+never seen:
+
+```
+/data/memory/people/41b4d5882439a902ef8489798bb9dd31/MEMORY.md
+  Alex mentions that they sail on weekends.
+
+/data/memory/MEMORY.md          (the host's own notebook, unchanged)
+  I take medication X daily.
+```
+
+One message, one new notebook, nothing of the sender in the owner's file and nothing of the
+owner in theirs. The folder is the sha256 of their number, so a listing shows a hash rather
+than who they are.
+
 What this does not change: the owner's agent is still private by default (no `public`, no
 notebooks for anyone else), and a notebook is a file on the same host, not an encrypted
 store. A hosted public agent should be its own machine and its own identity — which is
