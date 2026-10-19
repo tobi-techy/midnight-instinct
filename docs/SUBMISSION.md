@@ -164,6 +164,10 @@ file the agent could talk its way around.
 
 ### Other evidence
 
+- **A 1:53 demo video**: https://youtu.be/HEKhSP9-ZfA — the personal-agent half of the
+  story, filmed on the deployed agent. Where the narration says the notes are kept private
+  "on Midnight", read it precisely: the words stay on the host in that person's own
+  notebook; Midnight holds the commitment, the disclosed category and the nullifier.
 - Contracts compile with the Midnight Compact toolchain 0.31.1 (language 0.23):
   `pnpm run contracts:check`.
 - **1015 tests across 10 packages**: core 237, apps 147, inkbox 149, server 110,

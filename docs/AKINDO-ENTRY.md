@@ -31,7 +31,7 @@ filled after the deploy or the recording are marked **FILL IN**.
 | Live demo (the agent's verifier) | https://sealai.inkboxwire.com/verify |
 | Pre-filled proof link (issued by the live agent) | https://sealai.inkboxwire.com/verify/6910e607567598e110eb582693b7e757e856375db84bd3479bcc7b4fd643ac3c |
 | Landing page | https://github.com/tobi-techy/midnight-instinct (the README is the landing page: what it is, the judge path, the live links) |
-| Video | **FILL IN** after recording (target 2:30, shot list: `docs/DEMO-VIDEO.md`) |
+| Video | https://youtu.be/HEKhSP9-ZfA (1:53, shot list: `docs/DEMO-VIDEO.md`) |
 | Contracts on Preprod | `memory-vault` `6e9d608a997d5642564cbaea2b0a93a45fae0b806ee5fb68e8e0b008c2f19f7f`; `allowance-registry` `fd4bfac0d1ae522793050401ee9021bc7dfe27767745f5a3e954d15895d4afb1` |
 | Recorded Preprod proof | attestation `c91ebd08d0010b1a1aac921345ba5fe69354b87e910d346dd753573e7d352145`, verified read-only by the adapter |
 | Tests | 1015 across 10 packages, 0 failures, plus 13 Compact-runtime simulator tests |
@@ -74,8 +74,13 @@ full inventory, including what is deliberately not protected, is in `docs/PRIVAC
    the page reads the ledger and reports whether the attestation is recorded, which single
    category it disclosed, and that it is single-use. An unknown id reports `valid: false`.
 
-Two things stated plainly, because judges deserve them:
+Three things stated plainly, because judges deserve them:
 
+- **Where the notes actually are.** The video's narration says the notes are kept private
+  "on the Midnight network". Precisely: the words stay on the host, in that person's own
+  notebook file. Midnight holds a hiding commitment to each memory, the category attestation
+  the person chose to disclose, and the single-use nullifier. Nothing reverses out of the
+  chain back into the text, which is what makes the proof safe to hand to a stranger.
 - The live agent anchors in `mock` mode, so its own proofs are real hashes and real
   single-use nullifiers with no transaction submitted; the verify page says so on every
   check. The on-chain evidence is the recorded Preprod run (contracts above, attestation
