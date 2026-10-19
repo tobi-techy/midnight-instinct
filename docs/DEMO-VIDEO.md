@@ -41,6 +41,7 @@ There is no shell on the VM, so show the files through the Maritime files API. T
 one person's notebook, then the host's own, which is the whole isolation claim on screen:
 
 ```bash
+cd ~/Development/open-instinct && set -a; . ./.env; set +a    # loads MARITIME_API_KEY; without it every call answers "Not authenticated"
 A=143c0b5a-76a2-45b8-99e3-243151901a09
 H=$(curl -s -m 20 "https://api.maritime.sh/api/agents/$A/files/list?path=/data/memory/people" \
      -H "authorization: Bearer $MARITIME_API_KEY" | python3 -c 'import json,sys;print(json.load(sys.stdin)["entries"][0]["name"])')
@@ -49,6 +50,10 @@ curl -s "https://api.maritime.sh/api/agents/$A/files/download?path=/data/memory/
 echo "--- the host's own notebook ---"
 curl -s "https://api.maritime.sh/api/agents/$A/files/download?path=/data/memory/MEMORY.md" -H "authorization: Bearer $MARITIME_API_KEY"
 ```
+
+Run it as one paste: each new terminal starts without the environment, and a missing
+`MARITIME_API_KEY` looks like a failure (`{"detail":"Not authenticated"}`) rather than an
+unset variable.
 
 ## The shots
 
