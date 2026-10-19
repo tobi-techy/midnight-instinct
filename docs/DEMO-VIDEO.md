@@ -35,7 +35,7 @@ door already prefills the newest one (at the time of writing,
 | 1:30-1:50 | The allowance commands, live | "Here is the part a policy file cannot promise." authorize $50, spend $20, then attempt $40. |
 | 1:50-2:05 | `failed assert: over allowance` | "Refused by the circuit, not by the agent's code. Even a prompt-injected agent cannot talk its way past it." |
 | 2:05-2:20 | README two-ledger diagram | "One ledger holds commitments and limits. The other holds my actual words. That split is the whole product." |
-| 2:20-2:30 | Preprod addresses on screen | "Both contracts are live on Preprod, with 1014 tests behind them. The repo and the verify transcript are public." |
+| 2:20-2:30 | Preprod addresses on screen | "Both contracts are live on Preprod, with 1015 tests behind them. The repo and the verify transcript are public." |
 
 ## If you only have 60 seconds
 
@@ -48,7 +48,7 @@ the part nobody else in the room has:
 | 0:08-0:20 | Terminal: `ls /data/memory/people` then both `MEMORY.md` files, side by side | "Everyone who texts it gets their own notebook on the host. Mine is mine; the owner's is untouched. No other agent does this." |
 | 0:20-0:32 | Terminal: `instinct midnight verify <attestationId>` | "It can prove a fact about that memory without revealing it, and a stranger checks the proof with no wallet and no seed." |
 | 0:32-0:45 | The same id on the hosted page in a browser | "Single-use, one category, and the page says the mode honestly. The chain never sees the words." |
-| 0:45-0:60 | README two-ledger diagram, then the repo | "Commitments and limits on one ledger, my actual words on my machine. Both contracts are live on Preprod, with 1014 tests behind them." |
+| 0:45-0:60 | README two-ledger diagram, then the repo | "Commitments and limits on one ledger, my actual words on my machine. Both contracts are live on Preprod, with 1015 tests behind them." |
 
 ## Exact commands for the two live beats
 

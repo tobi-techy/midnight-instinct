@@ -259,7 +259,7 @@ docs/               architecture, permissions, protocol, keys, deploy, research
 
 ## Status
 
-The base is version 0.1: nine packages, an end-to-end smoke test and a cold-start test from a fresh clone. This fork adds the Midnight layer and stands at **1014 tests across 10 packages**, plus 13 Compact-runtime simulator tests. Both contracts are live on Preprod. Live iMessage and Maritime deployment were exercised against real identities during development; treat them as beta.
+The base is version 0.1: nine packages, an end-to-end smoke test and a cold-start test from a fresh clone. This fork adds the Midnight layer and stands at **1015 tests across 10 packages**, plus 13 Compact-runtime simulator tests. Both contracts are live on Preprod. Live iMessage and Maritime deployment were exercised against real identities during development; treat them as beta.
 
 Merit Systems publishes an unrelated project called [OpenInstinct](https://github.com/Merit-Systems/OpenInstinct). This project is not affiliated with it or with Instinct.
 

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { DEFAULT_PERSONA } from "../src/persona.js";
-import { PROMPT_SOURCES, buildSystemPrompt, describePromptLayers, wrapUntrusted, type PromptInput } from "../src/prompt.js";
+import { PROMPT_SOURCES, buildSystemPrompt, describePromptLayers, hostNameFor, wrapUntrusted, type PromptInput } from "../src/prompt.js";
 import type { Approval } from "../src/types.js";
 import { principalOf, testConfig } from "./helpers.js";
 
@@ -68,6 +68,23 @@ describe("buildSystemPrompt", () => {
     expect(p).not.toContain("Do not run tasks for them");
     expect(p).not.toContain("Allergic to shellfish");
     expect(p).not.toContain("+16175550100");
+  });
+
+  it("does not name the host to a sender when the host was never named", () => {
+    // The seeded default is the literal word "Owner": a sender should never read it.
+    const config = testConfig();
+    config.agent = { ...config.agent, public: true };
+    config.owner = { ...config.owner, name: "Owner" };
+    expect(hostNameFor(config)).toBe("your host");
+    const p = buildSystemPrompt(input({ config, principal: principalOf("stranger") }));
+    expect(p).toContain("hosted by your host");
+    expect(p).toContain("Share nothing about your host");
+    expect(p).not.toContain("Owner");
+    // A real name is used as it is, and the owner's own thread is untouched by the fallback.
+    const named = testConfig();
+    named.agent = { ...named.agent, public: true };
+    expect(hostNameFor(named)).toBe("Maria");
+    expect(buildSystemPrompt(input({ config: named, principal: principalOf("stranger") }))).toContain("hosted by Maria");
   });
 
   it("switches etiquette by channel", () => {

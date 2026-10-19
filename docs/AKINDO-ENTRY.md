@@ -34,7 +34,7 @@ filled after the deploy or the recording are marked **FILL IN**.
 | Video | **FILL IN** after recording (target 2:30, shot list: `docs/DEMO-VIDEO.md`) |
 | Contracts on Preprod | `memory-vault` `6e9d608a997d5642564cbaea2b0a93a45fae0b806ee5fb68e8e0b008c2f19f7f`; `allowance-registry` `fd4bfac0d1ae522793050401ee9021bc7dfe27767745f5a3e954d15895d4afb1` |
 | Recorded Preprod proof | attestation `c91ebd08d0010b1a1aac921345ba5fe69354b87e910d346dd753573e7d352145`, verified read-only by the adapter |
-| Tests | 1014 across 10 packages, 0 failures, plus 13 Compact-runtime simulator tests |
+| Tests | 1015 across 10 packages, 0 failures, plus 13 Compact-runtime simulator tests |
 
 ## How it works
 

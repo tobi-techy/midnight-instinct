@@ -99,8 +99,8 @@ was required for an identity that already exists; that documentation bug is fixe
 
 ## 8. Quality
 
-- **1014 tests pass across 10 packages, 0 failures** (verified 2026-10-18): core
-  236, apps 147, inkbox 149, server 110, cli 84, gateway 67, payments 66, network
+- **1015 tests pass across 10 packages, 0 failures** (verified 2026-10-19): core
+  237, apps 147, inkbox 149, server 110, cli 84, gateway 67, payments 66, network
   65, computer 43, midnight 47. Plus the 13 Compact-runtime simulator tests and
   an indexer-backed end-to-end check in `deploy/midnight-devnet`.
 - **CI is green on `main`**: `ci`, `secret-scan` and `build-images`. Both
