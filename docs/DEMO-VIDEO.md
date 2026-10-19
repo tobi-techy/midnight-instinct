@@ -19,16 +19,43 @@ export MIDNIGHT_CONTRACT_ADDRESS=6e9d608a997d5642564cbaea2b0a93a45fae0b806ee5fb6
 
 Have your phone mirrored or filmed alongside, with the Seal iMessage thread open. Have the
 agent's own verifier open in a browser tab too (`https://sealai.inkboxwire.com/verify`); it
-works while the adapter is down, because that agent verifies its own proofs, and the front
-door already prefills the newest one (at the time of writing,
+needs no adapter, because that agent verifies its own proofs, and the front door already
+prefills the newest one (at the time of writing,
 `https://sealai.inkboxwire.com/verify/6910e607567598e110eb582693b7e757e856375db84bd3479bcc7b4fd643ac3c`).
+
+It does need the agent awake, because the agent serves the page:
+
+```bash
+cd ~/Development/open-instinct && set -a; . ./.env; set +a
+A=143c0b5a-76a2-45b8-99e3-243151901a09
+curl -s -m 20 -o /dev/null -w 'health %{http_code} ' https://sealai.inkboxwire.com/health
+curl -s -m 20 -o /dev/null -w 'verify %{http_code}\n' https://sealai.inkboxwire.com/verify
+```
+
+Both must read `200` before you roll. `000` means the VM is asleep: send the agent one
+iMessage and re-run; it answers `200` within seconds of a wake.
+
+## The notebook beat: the exact commands
+
+There is no shell on the VM, so show the files through the Maritime files API. This prints
+one person's notebook, then the host's own, which is the whole isolation claim on screen:
+
+```bash
+A=143c0b5a-76a2-45b8-99e3-243151901a09
+H=$(curl -s -m 20 "https://api.maritime.sh/api/agents/$A/files/list?path=/data/memory/people" \
+     -H "authorization: Bearer $MARITIME_API_KEY" | python3 -c 'import json,sys;print(json.load(sys.stdin)["entries"][0]["name"])')
+echo "--- this person's notebook ---"
+curl -s "https://api.maritime.sh/api/agents/$A/files/download?path=/data/memory/people/$H/MEMORY.md" -H "authorization: Bearer $MARITIME_API_KEY"
+echo "--- the host's own notebook ---"
+curl -s "https://api.maritime.sh/api/agents/$A/files/download?path=/data/memory/MEMORY.md" -H "authorization: Bearer $MARITIME_API_KEY"
+```
 
 ## The shots
 
 | Time | On screen | Say |
 |---|---|---|
 | 0:00-0:15 | The repo README, Seal lockup | "Seal is a personal agent you text. It remembers for you, and proves things about your memories on Midnight without revealing them." |
-| 0:15-0:35 | Phone: text Seal a private fact. If you have a second number, have a second person text it too, then show `ls /data/memory/people` in a terminal | "Everyone who texts Seal gets a personal agent of their own: a notebook of their own on this host, one per person, and a vault scope of their own. One person's notes never mix with another's. I tell it something private here." |
+| 0:15-0:35 | Phone: text Seal a private fact. If you have a second number, have a second person text it too, then run the notebook beat above | "Everyone who texts Seal gets a personal agent of their own: a notebook of their own on this host, one per person, and a vault scope of their own. One person's notes never mix with another's, and none of mine are in the host's. I tell it something private here." |
 | 0:35-0:55 | Terminal: the commit lands | "That memory is saved on my device and anchored on Midnight as an opaque commitment. The words never leave this machine." |
 | 0:55-1:15 | `instinct midnight verify <attestationId>` | "Now a stranger checks the proof. No wallet, no seed, no cooperation from the agent." |
 | 1:15-1:30 | The verify output, then the same id on the hosted page in a browser | "Valid health proof, single-use. It reveals the category I chose and nothing else, and it cannot be replayed. A stranger opens the link the agent put in its reply and sees the same read — the page is public and read-only, and it says which mode the agent is in." |
@@ -45,10 +72,26 @@ the part nobody else in the room has:
 | Time | On screen | Say |
 |---|---|---|
 | 0:00-0:08 | Phone: you text Seal a private fact | "Seal is a personal agent you text. I tell it something private." |
-| 0:08-0:20 | Terminal: `ls /data/memory/people` then both `MEMORY.md` files, side by side | "Everyone who texts it gets their own notebook on the host. Mine is mine; the owner's is untouched. No other agent does this." |
+| 0:08-0:20 | Terminal: the notebook beat above, both `MEMORY.md` files, side by side | "Everyone who texts it gets their own notebook on the host. Mine is mine; the host's is untouched. No other agent does this." |
 | 0:20-0:32 | Terminal: `instinct midnight verify <attestationId>` | "It can prove a fact about that memory without revealing it, and a stranger checks the proof with no wallet and no seed." |
 | 0:32-0:45 | The same id on the hosted page in a browser | "Single-use, one category, and the page says the mode honestly. The chain never sees the words." |
 | 0:45-0:60 | README two-ledger diagram, then the repo | "Commitments and limits on one ledger, my actual words on my machine. Both contracts are live on Preprod, with 1015 tests behind them." |
+
+## If something goes wrong mid-take
+
+- **No reply while rolling.** Do not restart. Say "the agent sleeps when idle; watch this",
+  send a second message. It wakes and answers, and it reads as deliberate rather than broken.
+- **The verify page does not load.** The agent went back to sleep. Send a message, reload.
+- **A proof fails.** Read what the page says and say so plainly. Never dress it up.
+
+## What to say, and what not to
+
+- Say **mock mode** once, out loud, the way the page does. The on-chain evidence is the
+  recorded Preprod run; claiming a live transaction is the one line a judge can catch.
+- Never show the host's chat surface or the admin API on screen.
+- The strongest sentence available is the isolation one: *one person's notes never enter
+  another person's notebook or the host's*, and the notebook beat proves it on screen with
+  two files.
 
 ## Exact commands for the two live beats
 
